@@ -51,3 +51,4 @@ flere/lagrede baner, minikart, sektortider.
 - Testet med headless Chrome: begge moduser rendrer uten feil.
 
 **Ikke testet.** Kjørefølelse og ytelse i ekte nettleser med det store datasettet.
+- `b93eb2e Expand to 3.6x3.2 km of Kongsberg; sprint mode, sectors, minimap, saved tracks`
