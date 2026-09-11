@@ -1,8 +1,8 @@
 # SESSION_LOG — gateracer_web
 
 ## Neste prioritet
-Magnus tester kjørefølelsen i nettleseren (http://localhost:8080/web/). Avgjør: er det gøy nok til å gå videre?
-Deretter: mobil-/touch-styring, «mal huset ditt», ghost-runder.
+Magnus tester det store kartet (Funkelia-sprinten) og sektortidene. Deretter: ghost-bil av beste runde,
+touch-styring, «mal huset ditt», ytelse på svakere maskiner (55 000 trær + 1,3 M terrengpunkter).
 
 ---
 
@@ -34,4 +34,20 @@ stillbilder). Valgt retning: stilisert lavpoly-verden fra åpne kartdata, med ek
 **Ikke testet.** Selve kjørefølelsen (kan ikke kjøres headless). Touch/mobil finnes ikke ennå.
 
 **Commits.**
-- `Initial MVP: draw a track on real Kongsberg streets and race it` — verden, app, verktøy, README.
+- `5825b51 Initial MVP: draw a track on real Kongsberg streets and race it` — verden, app, verktøy, README.
+
+### Runde 2 samme dag — «Sykt bra. Jeg vil ha mer.»
+Magnus testet: morsomt. Ønsker: større kart (mer av Kongsberg, Funkelia), hus som ikke står i veien,
+flere/lagrede baner, minikart, sektortider.
+
+**Gjort.**
+- Område utvidet til 3,6 × 3,2 km (`tools/area.json`): sentrum, Lågen, Funkelia, Skimore. 32 Kartverket-fliser
+  à 1 km hentet med `tools/fetch_kartverket.py` (Kartverket svarte denne gangen). OSM: 5 361 hus, 2 939 veier.
+- `build_world.py` skrevet om: asymmetrisk område, fliser, multipolygon-relasjoner (elva!), elver som linjer,
+  terreng til binærfil (3 m), tretynning (tett nær vei, glissent i skog, 55 063 trær). 4 822 hus med laserhøyde.
+- App: indeksert terreng, sprint-modus (punkt til punkt) i tillegg til sløyfe, hus innen 4,5 m fra banesenter
+  skjules automatisk (og kolliderer ikke), «Fjern hus»-modus med lagring, lagrede løyper med navn, minikart,
+  tre sektorer med blå porter og differanse mot beste sektor, to eksempelløyper (sentrum, Funkelia-sprint).
+- Testet med headless Chrome: begge moduser rendrer uten feil.
+
+**Ikke testet.** Kjørefølelse og ytelse i ekte nettleser med det store datasettet.
