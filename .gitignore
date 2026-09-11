@@ -1,0 +1,3 @@
+venv/
+data/*.tif
+.DS_Store
