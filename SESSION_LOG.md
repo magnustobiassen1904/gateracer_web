@@ -68,3 +68,4 @@ lenke å dele.
 
 **Ikke testet.** Ytelse på ekte mobil. Datamengden per innlasting er ca. 16 MB ukomprimert.
 - `b93eb2e Expand to 3.6x3.2 km of Kongsberg; sprint mode, sectors, minimap, saved tracks`
+- `46474a1 Whole Kongsberg (5.5x5.4 km), LOD terrain, touch controls, GitHub Pages`
