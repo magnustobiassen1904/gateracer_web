@@ -40,7 +40,12 @@
   .tb { width: 74px; height: 74px; border-radius: 50%; font-size: 26px; background: rgba(20,24,40,.75); border: 2px solid #4a5480; touch-action: none; user-select: none; -webkit-user-select: none; }
   .tb.down { background: #e0333a; }
   #credit { position: fixed; right: 10px; bottom: 4px; font-size: 11px; color: #6c7290; z-index: 5; pointer-events: none; }
-  @media (pointer: coarse) { #keys { display: none; } #speed { bottom: 110px; } }
+  body.mobile #keys { display: none; } body.mobile #speed { bottom: 110px; } body.mobile #stats { display: none; }
+  @media (max-height: 520px) {
+    body.mobile #hud { padding: 4px 10px; min-width: 0; } body.mobile #hud .big { font-size: 20px; } body.mobile #hud .row, body.mobile #hud .sec { font-size: 11px; margin-top: 0; }
+    body.mobile #minimap { width: 96px; height: 96px; } body.mobile #speed { bottom: 90px; padding: 4px 12px; } body.mobile #speed .v { font-size: 26px; }
+    body.mobile .tb { width: 60px; height: 60px; font-size: 20px; } body.mobile #touch { padding: 0 10px 10px; } body.mobile #btnBackM { bottom: 90px; }
+  }
   @media (max-width: 700px) {
     #topbar { padding: 6px 8px; gap: 5px; } #topbar h1 { display: none; } #topbar .hint { flex-basis: 100%; font-size: 12px; order: 9; }
     button, select, input { padding: 6px 9px; font-size: 12px; } input { width: 90px; }
@@ -77,9 +82,11 @@
     <div class="row" id="lapNo">Runde 1</div>
     <div class="row" id="lastLap">Sist: –</div>
     <div class="row" id="bestLap">Best: –</div>
+    <div class="row" id="hits" style="color:#ffb35c"></div>
     <div class="sec" id="sectors"></div>
   </div>
   <canvas id="minimap"></canvas>
+  <button id="btnBackM" style="display:none; position:absolute; left:16px; bottom:118px; z-index:3">← Tegn</button>
   <div id="stats"></div>
   <div id="speed"><div class="v" id="spd">0</div><div class="u">km/h</div></div>
   <div id="keys">Piltaster / WASD kjører · R = tilbake til start · Mellomrom = håndbrekk</div>

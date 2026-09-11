@@ -37,6 +37,8 @@ python3 -m http.server 8080
   Bestetider ligger fortsatt bare lokalt hos hver spiller.
 - Hus som ligger i veien for banen fjernes automatisk. «Fjern hus» lar deg klikke bort flere manuelt (huskes).
 - Kjør: piltaster eller WASD, mellomrom = håndbrekk, R = tilbake til start.
+- Fotgjengere går langs banen og krysser av og til. Treffer du dem, flyr de av gårde (jelly-ragdoll) og telles i HUD.
+- På telefon skjules verktøylinjen under kjøring, spillet ber om fullskjerm og liggende format der nettleseren tillater det.
 - Tre sektorer med blå porter; HUD viser sektortid og differanse mot beste sektor. Minikart oppe til høyre.
 - Bestetid og beste sektorer per løype lagres lokalt i nettleseren.
 

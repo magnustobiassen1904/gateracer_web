@@ -80,6 +80,17 @@ fram; Magnus valgte 1 (løype i lenken) og ba om at det skal fungere på telefon
 - «Del lenke»: løypa (node-id-er + sløyfe/sprint + navn) i URL-hash, lastes ved åpning.
 
 **Ikke testet.** Fortsatt ingen ekte telefon i hus. Headless-test i 390 px bredde ser riktig ut.
+
+### Runde 5 samme dag — liggende telefon + fotgjengere
+Magnus bekreftet at mobil funker. Ønsker: kjøre med telefonen liggende, og «dummy folk» i gatene som flyr
+av gårde «helt jelly» når man treffer dem.
+
+**Gjort.**
+- Mobil under kjøring: verktøylinjen skjules, egen «← Tegn»-knapp, forsøk på fullskjerm + orientation.lock
+  (fungerer på Android, ikke iOS; på iOS må man snu telefonen selv). Egen CSS for lav høyde (liggende).
+- Fotgjengere (64 på desktop, 28 på mobil) med enkel lavpoly-kropp, går langs banen på begge sider og krysser
+  veien av og til. Treff (< 1,9 m, fart > 5 km/h): kastes i bilens retning med spinn og squash/stretch-«jelly»,
+  spretter, blir liggende 5 s, respawner. Teller i HUD, morsomme utrop.
 - `b93eb2e Expand to 3.6x3.2 km of Kongsberg; sprint mode, sectors, minimap, saved tracks`
 - `46474a1 Whole Kongsberg (5.5x5.4 km), LOD terrain, touch controls, GitHub Pages`
 - `f43cc76 Phone support and share links`

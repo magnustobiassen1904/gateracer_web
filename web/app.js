@@ -411,12 +411,83 @@ function buildTrack(nodeIds, closed) {
     for (const sgn of [-1, 1]) { const x = p[0] - d[1] * (TRACK_W / 2 + 1.2) * sgn, y = p[1] + d[0] * (TRACK_W / 2 + 1.2) * sgn, z = terrainZ(x, y); const pole = new THREE.Mesh(new THREE.BoxGeometry(0.3, 3, 0.3), blueMat); pole.position.set(x, z + 1.5, -y); trackGroup.add(pole); }
   }
   trackGroup.traverse(o => { o.receiveShadow = true; }); scene.add(trackGroup);
-  buildMinimapBase();
+  buildMinimapBase(); buildPeds();
 }
 function nearestTrack(x, y) {
   const cx = Math.floor(x / track.cell), cy = Math.floor(y / track.cell); let best = -1, bd = Infinity;
   for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) { const arr = track.grid.get(`${cx + a},${cy + b}`); if (!arr) continue; for (const i of arr) { const p = track.pts[i]; const d = (p[0] - x) ** 2 + (p[1] - y) ** 2; if (d < bd) { bd = d; best = i; } } }
   return { i: best, d: Math.sqrt(bd) };
+}
+
+// ------------------------------------------------------------------ fotgjengere («dummy folk»)
+const PEDS = [], PED_N = MOBILE ? 28 : 64; let hits = 0;
+const BLACK = new THREE.MeshLambertMaterial({ color: 0x0e0e12 });
+const SWEATER = [0x3b6fd8, 0xe04848, 0x2fa34a, 0xf2c744, 0xffffff, 0xff7ab3, 0x8b5cf6, 0xff8c1a, 0x1fb6c9], TROUSERS = [0x24304a, 0x555555, 0x7a5a3a, 0x1a1a1a, 0xc9b99a], SHOES = [0xffffff, 0x8b4a1c, 0xd62828, 0x1a1a1a];
+const pick = a => a[Math.floor(Math.random() * a.length)];
+function makePed() {
+  const g = new THREE.Group();
+  const add = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); g.add(m); return m; };
+  const trousers = new THREE.MeshLambertMaterial({ color: pick(TROUSERS) }), sweater = new THREE.MeshLambertMaterial({ color: pick(SWEATER) }), shoes = new THREE.MeshLambertMaterial({ color: pick(SHOES) });
+  add(new THREE.BoxGeometry(0.16, 0.1, 0.28), shoes, 0.11, 0.05, 0.02); add(new THREE.BoxGeometry(0.16, 0.1, 0.28), shoes, -0.11, 0.05, 0.02);   // sko
+  add(new THREE.BoxGeometry(0.36, 0.72, 0.26), trousers, 0, 0.46, 0);                                                                          // bukse
+  add(new THREE.BoxGeometry(0.5, 0.62, 0.3), sweater, 0, 1.13, 0);                                                                             // genser
+  add(new THREE.BoxGeometry(0.8, 0.14, 0.14), sweater, 0, 1.32, 0);                                                                            // ermer
+  add(new THREE.BoxGeometry(0.1, 0.1, 0.12), BLACK, 0.44, 1.22, 0); add(new THREE.BoxGeometry(0.1, 0.1, 0.12), BLACK, -0.44, 1.22, 0);        // hender
+  add(new THREE.BoxGeometry(0.12, 0.1, 0.12), BLACK, 0, 1.48, 0);                                                                              // hals
+  add(new THREE.SphereGeometry(0.17, 8, 6), BLACK, 0, 1.66, 0);                                                                                // hode
+  g.traverse(o => { o.castShadow = true; });
+  return g;
+}
+function spawnPed(p) {
+  p.i = Math.random() * (track.n - 1); p.dir = Math.random() < 0.5 ? -1 : 1; p.speed = 0.9 + Math.random() * 0.9;
+  p.side = Math.random() < 0.5 ? -1 : 1; p.off = p.side * (TRACK_W / 2 + 1.0 + Math.random() * 1.6); p.crossing = 0;
+  p.mode = 'walk'; p.t = Math.random() * 10; p.g.visible = true; p.g.rotation.set(0, 0, 0); p.g.scale.set(1, 1, 1);
+}
+function buildPeds() {
+  while (PEDS.length < PED_N) { const g = makePed(); scene.add(g); PEDS.push({ g }); }
+  for (const p of PEDS) spawnPed(p);
+  hits = 0;
+}
+function trackPoint(fi) { const i = Math.floor(fi), j = Math.min(track.n - 1, i + 1), t = fi - i, a = track.pts[i], b = track.pts[j]; return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]; }
+function updatePeds(dt) {
+  const carDir = [Math.cos(car.hdg), Math.sin(car.hdg)];
+  for (const p of PEDS) {
+    p.t += dt;
+    if (p.mode === 'walk') {
+      p.i += p.dir * p.speed * dt / 2;
+      if (track.closed) p.i = (p.i + track.n - 1) % (track.n - 1); else if (p.i <= 0 || p.i >= track.n - 1) { p.dir = -p.dir; p.i = clamp(p.i, 0, track.n - 1.001); }
+      if (!p.crossing && Math.random() < dt * 0.03) p.crossing = -Math.sign(p.off);          // bestemmer seg for å krysse veien
+      if (p.crossing) { p.off += p.crossing * 1.1 * dt; if (Math.abs(p.off) > TRACK_W / 2 + 1.0 && Math.sign(p.off) === p.crossing) p.crossing = 0; }
+      const q = trackPoint(p.i), d = track.dirAt(Math.floor(p.i));
+      p.x = q[0] - d[1] * p.off; p.y = q[1] + d[0] * p.off; p.z = terrainZ(p.x, p.y);
+      const wx = p.crossing ? -d[1] * p.crossing : d[0] * p.dir, wy = p.crossing ? d[0] * p.crossing : d[1] * p.dir;
+      p.g.position.set(p.x, p.z + 0.06 * Math.abs(Math.sin(p.t * 9)), -p.y);
+      p.g.rotation.y = Math.atan2(-wy, wx) + Math.PI / 2;
+      p.g.rotation.z = Math.sin(p.t * 9) * 0.06;
+      // truffet?
+      const dx = car.x - p.x, dy = car.y - p.y, dist = Math.hypot(dx, dy);
+      if (dist < 1.9 && Math.abs(car.v) > 1.5) {
+        const sp = Math.abs(car.v) * Math.sign(car.v);
+        p.mode = 'fly'; p.t = 0; p.bounces = 0;
+        p.vx = carDir[0] * sp * 0.9 + (Math.random() - 0.5) * 3 - dx * 0.5; p.vy = carDir[1] * sp * 0.9 + (Math.random() - 0.5) * 3 - dy * 0.5; p.vz = 4 + Math.abs(sp) * 0.45;
+        p.wx = (Math.random() - 0.5) * 14; p.wz = (Math.random() - 0.5) * 14; p.wy = (Math.random() - 0.5) * 6;
+        car.v *= 0.93; hits++; showMsg(['AU!', 'OI!', 'NEEEI!', 'HEI!', 'ÅÅÅ!'][hits % 5], 700);
+      }
+    } else if (p.mode === 'fly') {
+      p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt; p.vz -= 22 * dt;
+      const g = terrainZ(p.x, p.y);
+      if (p.z < g) { p.z = g; p.vz = -p.vz * 0.45; p.vx *= 0.65; p.vy *= 0.65; p.wx *= 0.6; p.wz *= 0.6; p.bounces++;
+        if (p.bounces > 3 || (Math.abs(p.vz) < 1.5 && Math.hypot(p.vx, p.vy) < 1.2)) { p.mode = 'down'; p.t = 0; } }
+      p.g.position.set(p.x, p.z + 0.6, -p.y);
+      p.g.rotation.x += p.wx * dt; p.g.rotation.z += p.wz * dt; p.g.rotation.y += p.wy * dt;
+      const j = 1 + 0.45 * Math.sin(p.t * 24) * Math.exp(-p.t * 0.6);      // jelly
+      p.g.scale.set(1 / Math.sqrt(j), j, 1 / Math.sqrt(j));
+    } else { // down
+      const j = 1 + 0.25 * Math.sin(p.t * 18) * Math.exp(-p.t * 1.5); p.g.scale.set(1 / Math.sqrt(j), j, 1 / Math.sqrt(j));
+      p.g.rotation.x = Math.PI / 2; p.g.position.y = p.z + 0.35;
+      if (p.t > 5) spawnPed(p);
+    }
+  }
 }
 
 // ------------------------------------------------------------------ minikart
@@ -451,7 +522,7 @@ for (const [id, key] of [['tLeft', 'arrowleft'], ['tRight', 'arrowright'], ['tGa
   el.addEventListener('pointerdown', e => { el.setPointerCapture(e.pointerId); on(e); }); el.addEventListener('pointerup', off); el.addEventListener('pointercancel', off);
 }
 $('tReset').addEventListener('pointerdown', e => { e.preventDefault(); if (racing) resetCar(); });
-if (MOBILE) $('touch').style.display = 'flex';
+if (MOBILE) { $('touch').style.display = 'flex'; document.body.classList.add('mobile'); }
 let racing = false, lap = 1, lapStart = 0, lastLap = null, best = null, bestKey = '', prevP = 0, finished = false;
 let secTimes = [], secStart = 0, secIdx = 0, secDelta = [];
 function resetCar() {
@@ -531,7 +602,8 @@ function step(dt) {
   $('lapTime').textContent = fmt((finished ? lastLap : performance.now() - lapStart));
   $('lapNo').textContent = (track.closed ? `Runde ${lap}` : (finished ? 'I mål · R for ny start' : 'Sprint')) + (onTrack ? '' : ' · utenfor banen');
   $('lastLap').textContent = 'Sist: ' + (lastLap ? fmt(lastLap) : '–'); $('bestLap').textContent = 'Best: ' + (best ? fmt(best.lap) : '–');
-  sectorHud(); drawMinimap();
+  updatePeds(dt); sectorHud(); drawMinimap();
+  $('hits').textContent = hits ? `Folk truffet: ${hits}` : '';
 }
 let lastT = 0;
 function loop(t) { if (!racing) return; const dt = Math.min(0.05, (t - lastT) / 1000 || 0.016); lastT = t; step(dt); renderer.render(scene, camera); requestAnimationFrame(loop); }
@@ -546,10 +618,14 @@ $('btnRace').onclick = () => {
   $('draw').style.display = 'none'; raceDiv.style.display = 'block';
   for (const id of DRAW_BTNS) $(id).style.display = 'none'; $('loopChk').parentElement.style.display = 'none';
   $('btnBack').style.display = ''; hint.textContent = `${loopMode ? 'Sløyfe' : 'Sprint'} · ${hidden.size} hus fjernet fra banen · piltaster eller WASD`;
+  if (MOBILE) { $('topbar').style.display = 'none'; $('btnBackM').style.display = '';
+    try { document.documentElement.requestFullscreen?.().then(() => screen.orientation?.lock?.('landscape').catch(() => {})).catch(() => {}); } catch {} }
   resizeRace(); resetCar(); racing = true; lastT = performance.now(); showMsg('GO!', 1000); step(0.016); requestAnimationFrame(loop);
 };
+$('btnBackM').onclick = () => $('btnBack').click();
 $('btnBack').onclick = () => {
-  racing = false; raceDiv.style.display = 'none'; $('draw').style.display = 'block';
+  racing = false; $('topbar').style.display = ''; $('btnBackM').style.display = 'none';
+  try { document.exitFullscreen?.().catch(() => {}); } catch {} raceDiv.style.display = 'none'; $('draw').style.display = 'block';
   for (const id of DRAW_BTNS) $(id).style.display = ''; $('loopChk').parentElement.style.display = '';
   $('btnBack').style.display = 'none'; rebuildRoute(); resizeMap();
 };
