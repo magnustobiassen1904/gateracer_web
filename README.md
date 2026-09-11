@@ -30,8 +30,11 @@ python3 -m http.server 8080
 
 - Klikk på veier for å legge punkter, løypa snapper til gatenettet. «Sløyfe» av = sprint (punkt til punkt).
 - Eksempler: «sentrum» (sløyfe), «Funkelia» (sprint opp Funkeliaveien til Skimore), «Teknologiparken» (sløyfe over Kongsberg bru).
-- Mobil: pinch-zoom på kartet, knapper på skjermen for gass/brems/sving. Skygger og halvparten av trærne er slått av på mobil.
+- Mobil: pinch-zoom på kartet, knapper på skjermen for gass/brems/sving. Skygger og halvparten av trærne er slått av,
+  terrenget i full oppløsning bygges bare rundt bilen (330 m) og kastes når man kjører videre.
 - Lagre løyper med navn (lokalt i nettleseren), hent dem fra «Mine løyper…».
+- «Del lenke» kopierer en adresse som åpner spillet med løypa ferdig tegnet (`#t=L<node-id-er>&n=<navn>`).
+  Bestetider ligger fortsatt bare lokalt hos hver spiller.
 - Hus som ligger i veien for banen fjernes automatisk. «Fjern hus» lar deg klikke bort flere manuelt (huskes).
 - Kjør: piltaster eller WASD, mellomrom = håndbrekk, R = tilbake til start.
 - Tre sektorer med blå porter; HUD viser sektortid og differanse mot beste sektor. Minikart oppe til høyre.

@@ -1,8 +1,8 @@
 # SESSION_LOG — gateracer_web
 
 ## Neste prioritet
-Del lenken (https://magnustobiassen1904.github.io/gateracer_web/) og samle tilbakemeldinger, særlig fra mobil.
-Deretter: ghost-bil av beste runde, dele løyper via lenke (løyper ligger i dag bare i egen nettleser), «mal huset ditt».
+Magnus tester på ekte telefon og deler løype-lenker. Hvis folk sender tider som skjermbilder: bygg toppliste
+(Supabase, krever bevisst beslutning om persondata). Ellers: ghost-bil av beste runde, «mal huset ditt».
 
 ---
 
@@ -67,5 +67,18 @@ lenke å dele.
   Offentlig var nødvendig for gratis Pages. Ingen persondata i repoet.
 
 **Ikke testet.** Ytelse på ekte mobil. Datamengden per innlasting er ca. 16 MB ukomprimert.
+
+### Runde 4 samme dag — telefon + løype i lenken
+Spørsmål fra Magnus: ser andre løypene jeg lagrer? Svar: nei, alt er lokalt (ingen server). Tre alternativer lagt
+fram; Magnus valgte 1 (løype i lenken) og ba om at det skal fungere på telefon.
+
+**Gjort.**
+- Responsivt: verktøylinjen brytes over flere rader, mindre HUD/minikart under 700 px, ingen zoom ved dobbelttrykk.
+- Terreng i full oppløsning bygges nå lat (bare biter innen 330 m på mobil / 700 m på desktop) og kastes når
+  bilen kjører videre. Før lå 3,3 M punkter i minnet fra start, som trolig hadde knekt iPhone-Safari.
+- Touch-knapper bruker pointer capture (slapp gassen når fingeren gled litt før).
+- «Del lenke»: løypa (node-id-er + sløyfe/sprint + navn) i URL-hash, lastes ved åpning.
+
+**Ikke testet.** Fortsatt ingen ekte telefon i hus. Headless-test i 390 px bredde ser riktig ut.
 - `b93eb2e Expand to 3.6x3.2 km of Kongsberg; sprint mode, sectors, minimap, saved tracks`
 - `46474a1 Whole Kongsberg (5.5x5.4 km), LOD terrain, touch controls, GitHub Pages`
