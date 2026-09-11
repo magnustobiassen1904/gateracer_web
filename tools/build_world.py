@@ -185,17 +185,19 @@ nb = binary_dilation(building_mask, iterations=3)
 veg = chm.copy(); veg[nb] = 0; veg[cls == 2] = 0
 peaks = (veg == maximum_filter(veg, size=7)) & (veg >= 3.0)
 rr, cc = np.nonzero(peaks); order = np.argsort(-veg[rr, cc])
-trees = []; taken = set()
+trees = []; taken = set(); forest = []
 for k in order:
     r_, c_ = rr[k], cc[k]; hgt = float(veg[r_, c_])
     dense = near_road[r_, c_]
     if not dense and hgt < 5.5: continue
-    sp = 4 if dense else 9
+    sp = 4 if dense else 10
     key = (r_ // sp, c_ // sp)
     if key in taken: continue
     taken.add(key)
-    trees.append([int(c_ + X0), int(r_ + Y0), round(hgt, 1)])
-    if len(trees) >= 70000: break
+    (trees if dense else forest).append([int(c_ + X0), int(r_ + Y0), round(hgt, 1)])
+print("trær nær vei", len(trees), "i skog", len(forest))
+random.Random(1).shuffle(forest)
+trees += forest[:max(0, 90000 - len(trees))]
 print("trær", len(trees))
 
 # ---------------------------------------------------------------- terreng -> binærfiler

@@ -1,13 +1,13 @@
-[out:json][timeout:180];
+[out:json][timeout:240];
 (
-  way["building"](59.64958,9.59885,59.67961,9.66501);
-  way["highway"](59.64958,9.59885,59.67961,9.66501);
-  node["natural"="tree"](59.64958,9.59885,59.67961,9.66501);
-  way["natural"~"wood|water|scrub|bare_rock|scree"](59.64958,9.59885,59.67961,9.66501);
-  way["landuse"~"forest|grass|meadow|residential|farmland|quarry|industrial"](59.64958,9.59885,59.67961,9.66501);
-  way["leisure"~"park|pitch|playground|golf_course"](59.64958,9.59885,59.67961,9.66501);
-  way["waterway"~"river|stream"](59.64958,9.59885,59.67961,9.66501);
-  relation["natural"="water"](59.64958,9.59885,59.67961,9.66501);
-  relation["landuse"="forest"](59.64958,9.59885,59.67961,9.66501);
+  way["building"](59.64325,9.59885,59.69317,9.69881);
+  way["highway"](59.64325,9.59885,59.69317,9.69881);
+  way["natural"~"wood|water|scrub|bare_rock|scree|wetland"](59.64325,9.59885,59.69317,9.69881);
+  way["landuse"~"forest|grass|meadow|residential|farmland|quarry|industrial"](59.64325,9.59885,59.69317,9.69881);
+  way["leisure"~"park|pitch|playground|golf_course"](59.64325,9.59885,59.69317,9.69881);
+  way["waterway"~"river|stream"](59.64325,9.59885,59.69317,9.69881);
+  relation["natural"="water"](59.64325,9.59885,59.69317,9.69881);
+  relation["landuse"~"forest|residential"](59.64325,9.59885,59.69317,9.69881);
+  relation["natural"="wood"](59.64325,9.59885,59.69317,9.69881);
 );
 out body; >; out skel qt;

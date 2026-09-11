@@ -1,8 +1,8 @@
 # SESSION_LOG — gateracer_web
 
 ## Neste prioritet
-Magnus tester det store kartet (Funkelia-sprinten) og sektortidene. Deretter: ghost-bil av beste runde,
-touch-styring, «mal huset ditt», ytelse på svakere maskiner (55 000 trær + 1,3 M terrengpunkter).
+Del lenken (https://magnustobiassen1904.github.io/gateracer_web/) og samle tilbakemeldinger, særlig fra mobil.
+Deretter: ghost-bil av beste runde, dele løyper via lenke (løyper ligger i dag bare i egen nettleser), «mal huset ditt».
 
 ---
 
@@ -51,4 +51,20 @@ flere/lagrede baner, minikart, sektortider.
 - Testet med headless Chrome: begge moduser rendrer uten feil.
 
 **Ikke testet.** Kjørefølelse og ytelse i ekte nettleser med det store datasettet.
+
+### Runde 3 samme dag — hele Kongsberg + GitHub Pages
+Magnus: «sykt morsomt». Ønsker Skarpåsveien, Madsebakken, Kjennerudvannet, Teknologiparken/Kongsberg bru, og en
+lenke å dele.
+
+**Gjort.**
+- Område 5,5 × 5,4 km (`tools/area.json`). 72 Kartverket-fliser. OBS: gamle fliser med samme navn måtte slettes
+  først (fetch-scriptet hopper over filer som finnes). 10 842 hus (9 677 laser), 5 157 veier, 90 000 trær
+  (alle nær vei + tilfeldig utvalg i skog).
+- Terreng i biter à 450 m med to detaljnivåer (full/1:4) som byttes etter avstand til bilen. Nødvendig: 3,3 M punkter.
+- Mobil: touch-knapper, pinch-zoom, ingen skygger, halve trærne. `?mobile=1` for test.
+- Attribusjon OSM/Kartverket i spillet og README. Eksempel 3: sløyfe over Kongsberg bru ved Teknologiparken.
+- Repo opprettet offentlig: github.com/magnustobiassen1904/gateracer_web, GitHub Pages fra main.
+  Offentlig var nødvendig for gratis Pages. Ingen persondata i repoet.
+
+**Ikke testet.** Ytelse på ekte mobil. Datamengden per innlasting er ca. 16 MB ukomprimert.
 - `b93eb2e Expand to 3.6x3.2 km of Kongsberg; sprint mode, sectors, minimap, saved tracks`

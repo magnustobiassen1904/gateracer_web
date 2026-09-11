@@ -1,7 +1,11 @@
 # gateracer_web
 
-Tegn din egen racerbane på ekte gater og kjør den i nettleseren. Området er 3,6 × 3,2 km av Kongsberg
-(sentrum, Lågen, vestsiden opp til Funkelia og Skimore), origo i Mauritz Hansens gate (59.665499, 9.640823).
+Tegn din egen racerbane på ekte gater og kjør den i nettleseren.
+
+**Spill:** https://magnustobiassen1904.github.io/gateracer_web/
+
+Området er 5,5 × 5,4 km av Kongsberg: sentrum, Lågen, Funkelia og Skimore i vest, Madsebakken, Skarpåsveien og
+Kjennerudvannet i øst, Teknologiparken og Kongsberg bru i sør. Origo i Mauritz Hansens gate (59.665499, 9.640823).
 
 ## Hva som er ekte data
 
@@ -25,14 +29,15 @@ python3 -m http.server 8080
 Åpne http://localhost:8080/web/ i Chrome eller Safari.
 
 - Klikk på veier for å legge punkter, løypa snapper til gatenettet. «Sløyfe» av = sprint (punkt til punkt).
-- «Eksempel: sentrum» (sløyfe) og «Eksempel: Funkelia» (sprint opp Funkeliaveien til Skimore).
+- Eksempler: «sentrum» (sløyfe), «Funkelia» (sprint opp Funkeliaveien til Skimore), «Teknologiparken» (sløyfe over Kongsberg bru).
+- Mobil: pinch-zoom på kartet, knapper på skjermen for gass/brems/sving. Skygger og halvparten av trærne er slått av på mobil.
 - Lagre løyper med navn (lokalt i nettleseren), hent dem fra «Mine løyper…».
 - Hus som ligger i veien for banen fjernes automatisk. «Fjern hus» lar deg klikke bort flere manuelt (huskes).
 - Kjør: piltaster eller WASD, mellomrom = håndbrekk, R = tilbake til start.
 - Tre sektorer med blå porter; HUD viser sektortid og differanse mot beste sektor. Minikart oppe til høyre.
 - Bestetid og beste sektorer per løype lagres lokalt i nettleseren.
 
-Test-URL-er: `?demo=1` (sentrum) / `?demo=2` (Funkelia) starter direkte, `&drive=3` gir gass i 3 sekunder,
+Test-URL-er: `?demo=1` (sentrum) / `?demo=2` (Funkelia) / `?demo=3` (Teknologiparken) starter direkte, `&mobile=1` tvinger mobilmodus, `&drive=3` gir gass i 3 sekunder,
 `&top=140` viser banen ovenfra (feilsøking).
 
 ## Bygge verdenen på nytt (nytt sted eller ny data)
@@ -43,6 +48,15 @@ Test-URL-er: `?demo=1` (sentrum) / `?demo=2` (Funkelia) starter direkte, `&drive
 4. `./venv/bin/python tools/build_world.py` skriver `data/world.json`, `terrain.bin`, `terrain_cls.bin`.
 
 Venv: `python3 -m venv venv && ./venv/bin/pip install numpy pillow pyproj tifffile imagecodecs scipy`
+
+## Publisering
+
+GitHub Pages fra `main`, rot. `index.html` i rot videresender til `web/`. Push til `main` = ny versjon live etter 1–2 min.
+
+## Lisens og attribusjon
+
+Kartdata i `data/` er avledet fra OpenStreetMap (© OpenStreetMap-bidragsytere, ODbL 1.0) og Kartverkets
+nasjonale høydemodell (CC BY 4.0). Attribusjon vises i spillet. Koden er Magnus Tobiassens.
 
 ## Eksterne tjenester
 

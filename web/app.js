@@ -163,16 +163,26 @@ function rebuildRoute() {
     : `${loopMode ? 'Sløyfe' : 'Sprint'}: ${Math.round(len)} m, ${waypoints.length} punkter. ${ok ? 'Trykk Kjør!' : 'Legg til flere punkter (minst 150 m).'}`;
   drawMap();
 }
-let pdown = null, dragged = false;
-mapC.addEventListener('pointerdown', e => { pdown = [e.clientX, e.clientY, view.cx, view.cy]; dragged = false; mapC.setPointerCapture(e.pointerId); });
+let pdown = null, dragged = false; const ptrs = new Map(); let pinch = null;
+mapC.addEventListener('pointerdown', e => {
+  ptrs.set(e.pointerId, [e.clientX, e.clientY]); mapC.setPointerCapture(e.pointerId);
+  if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), scale: view.scale }; pdown = null; return; }
+  pdown = [e.clientX, e.clientY, view.cx, view.cy]; dragged = false;
+});
 mapC.addEventListener('pointermove', e => {
+  if (!ptrs.has(e.pointerId)) return; ptrs.set(e.pointerId, [e.clientX, e.clientY]);
+  if (pinch && ptrs.size === 2) {
+    const [a, b] = [...ptrs.values()]; const d = Math.hypot(a[0] - b[0], a[1] - b[1]);
+    const rect = mapC.getBoundingClientRect(); const mx = (a[0] + b[0]) / 2 - rect.left, my = (a[1] + b[1]) / 2 - rect.top;
+    const [wx, wy] = s2w(mx, my); view.scale = clamp(pinch.scale * d / pinch.d, 0.15, 14); const [nx, ny] = s2w(mx, my); view.cx += wx - nx; view.cy += wy - ny; drawMap(); return;
+  }
   if (!pdown) return;
   const dx = e.clientX - pdown[0], dy = e.clientY - pdown[1];
   if (Math.hypot(dx, dy) > 4) dragged = true;
   if (dragged) { view.cx = pdown[2] - dx / view.scale; view.cy = pdown[3] + dy / view.scale; drawMap(); }
 });
-mapC.addEventListener('pointerup', e => {
-  if (pdown && !dragged) {
+const endPtr = e => {
+  if (pdown && !dragged && !pinch) {
     const rect = mapC.getBoundingClientRect();
     const [x, y] = s2w(e.clientX - rect.left, e.clientY - rect.top);
     if (clickMode === 'house') {
@@ -183,8 +193,9 @@ mapC.addEventListener('pointerup', e => {
       if (id !== null && id !== waypoints[waypoints.length - 1]) { waypoints.push(id); rebuildRoute(); }
     }
   }
-  pdown = null;
-});
+  ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = null; pdown = null;
+};
+mapC.addEventListener('pointerup', endPtr); mapC.addEventListener('pointercancel', endPtr);
 mapC.addEventListener('wheel', e => {
   e.preventDefault();
   const rect = mapC.getBoundingClientRect();
@@ -206,6 +217,7 @@ function setRoute(pts, loop, maxD = 200) {
 }
 $('btnDemo').onclick = () => setRoute([[0, 0], [0, -220], [170, -220], [170, 0]], true);
 $('btnDemo2').onclick = () => setRoute([[0, 0], [-1191, -498], [-1750, -690]], false);
+$('btnDemo3').onclick = () => setRoute([[340, -1140], [535, -1817], [900, -1500], [700, -900]], true);
 // lagrede løyper
 function refreshTrackList() {
   const sel = $('trackList'); sel.innerHTML = '<option value="">Mine løyper…</option>';
@@ -223,12 +235,15 @@ resizeMap(); rebuildRoute();
 // ------------------------------------------------------------------ 3D-scene
 const raceDiv = $('race');
 let renderer, scene, camera, sun, carGroup, trackGroup = null, bldMesh = null;
+const terrainChunks = [];
+const MOBILE = new URLSearchParams(location.search).get('mobile') === '1' || matchMedia('(pointer: coarse)').matches || innerWidth < 900;
+const HI_RADIUS = MOBILE ? 420 : 700;
 const V = (x, y, z) => new THREE.Vector3(x, z, -y);
 const CLS_COL = [[118, 158, 86], [66, 104, 58], [64, 118, 170], [176, 172, 96], [110, 168, 80], [120, 140, 70], [150, 142, 132], [150, 150, 140]];
 function buildStaticScene() {
   renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-  renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.setPixelRatio(Math.min(devicePixelRatio, MOBILE ? 1.5 : 2));
+  renderer.shadowMap.enabled = !MOBILE; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   raceDiv.appendChild(renderer.domElement);
   scene = new THREE.Scene(); scene.background = new THREE.Color(0x8fc1ea); scene.fog = new THREE.Fog(0xb9d3ea, 300, 1600);
   camera = new THREE.PerspectiveCamera(70, 1, 0.5, 5000);
@@ -236,27 +251,40 @@ function buildStaticScene() {
   sun = new THREE.DirectionalLight(0xfff2dc, 1.6); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
   const sc = sun.shadow.camera; sc.left = -160; sc.right = 160; sc.top = 160; sc.bottom = -160; sc.near = 10; sc.far = 800; sun.shadow.bias = -0.0008;
   scene.add(sun); scene.add(sun.target);
-  // terreng (indeksert, flat shading)
-  const nx = T.nx, ny = T.ny, pos = new Float32Array(nx * ny * 3), col = new Float32Array(nx * ny * 3);
-  for (let i = 0; i < ny; i++) for (let j = 0; j < nx; j++) {
-    const k = i * nx + j, c = CLS_COL[TC[k]] || CLS_COL[0], n = 1 + (Math.random() - 0.5) * 0.08;
-    pos[k * 3] = T.x0 + j * T.cell; pos[k * 3 + 1] = T.zmin + TZ[k] / 10; pos[k * 3 + 2] = -(T.y0 + i * T.cell);
-    col[k * 3] = c[0] / 255 * n; col[k * 3 + 1] = c[1] / 255 * n; col[k * 3 + 2] = c[2] / 255 * n;
+  // terreng i biter med to detaljnivåer (nær bilen: full oppløsning, ellers 1/4)
+  const CH = 150, tmat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
+  const chunkMesh = (i0, j0, i1, j1, step) => {
+    const rows = [], cols = [];
+    for (let i = i0; i < i1; i += step) rows.push(i); rows.push(i1);
+    for (let j = j0; j < j1; j += step) cols.push(j); cols.push(j1);
+    const nr = rows.length, nc = cols.length, pos = new Float32Array(nr * nc * 3), col = new Float32Array(nr * nc * 3);
+    for (let a = 0; a < nr; a++) for (let b = 0; b < nc; b++) {
+      const i = rows[a], j = cols[b], k = i * T.nx + j, o = (a * nc + b) * 3, c = CLS_COL[TC[k]] || CLS_COL[0], nz = 1 + (((i * 7 + j * 13) % 10) - 5) * 0.008;
+      pos[o] = T.x0 + j * T.cell; pos[o + 1] = T.zmin + TZ[k] / 10; pos[o + 2] = -(T.y0 + i * T.cell);
+      col[o] = c[0] / 255 * nz; col[o + 1] = c[1] / 255 * nz; col[o + 2] = c[2] / 255 * nz;
+    }
+    const idx = new Uint32Array((nr - 1) * (nc - 1) * 6); let q = 0;
+    for (let a = 0; a < nr - 1; a++) for (let b = 0; b < nc - 1; b++) { const p0 = a * nc + b, p1 = p0 + 1, p2 = p0 + nc, p3 = p2 + 1; idx[q++] = p0; idx[q++] = p1; idx[q++] = p2; idx[q++] = p1; idx[q++] = p3; idx[q++] = p2; }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.BufferAttribute(col, 3)); g.setIndex(new THREE.BufferAttribute(idx, 1)); g.computeVertexNormals();
+    const mesh = new THREE.Mesh(g, tmat); mesh.receiveShadow = true; return mesh;
+  };
+  for (let ci = 0; ci < T.ny - 1; ci += CH) for (let cj = 0; cj < T.nx - 1; cj += CH) {
+    const i1 = Math.min(T.ny - 1, ci + CH), j1 = Math.min(T.nx - 1, cj + CH);
+    const hi = chunkMesh(ci, cj, i1, j1, 1), lo = chunkMesh(ci, cj, i1, j1, 4); hi.visible = false;
+    scene.add(hi); scene.add(lo);
+    terrainChunks.push({ hi, lo, cx: T.x0 + (cj + j1) / 2 * T.cell, cy: T.y0 + (ci + i1) / 2 * T.cell });
   }
-  const idx = new Uint32Array((nx - 1) * (ny - 1) * 6); let q = 0;
-  for (let i = 0; i < ny - 1; i++) for (let j = 0; j < nx - 1; j++) { const a = i * nx + j, b = a + 1, c = a + nx, d = c + 1; idx[q++] = a; idx[q++] = b; idx[q++] = c; idx[q++] = b; idx[q++] = d; idx[q++] = c; }
-  const tg = new THREE.BufferGeometry();
-  tg.setAttribute('position', new THREE.BufferAttribute(pos, 3)); tg.setAttribute('color', new THREE.BufferAttribute(col, 3)); tg.setIndex(new THREE.BufferAttribute(idx, 1)); tg.computeVertexNormals();
-  const terrain = new THREE.Mesh(tg, new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true })); terrain.receiveShadow = true; scene.add(terrain);
   // veier
   const roadGeos = world.roads.map(r => ribbon(r.p, r.w, 0.08, r.drive ? [0.30, 0.31, 0.34] : [0.62, 0.58, 0.50], false)).filter(Boolean);
   const roads = new THREE.Mesh(mergeGeometries(roadGeos), new THREE.MeshLambertMaterial({ vertexColors: true, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 })); roads.receiveShadow = true; scene.add(roads);
   // trær
-  const n = world.trees.length;
+  const treeList = MOBILE ? world.trees.filter((_, i) => i % 2 === 0) : world.trees;
+  const n = treeList.length;
   const cone = new THREE.InstancedMesh(new THREE.ConeGeometry(1, 1, 6), new THREE.MeshLambertMaterial({ flatShading: true }), n);
   const trunk = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.5, 0.5, 1, 5), new THREE.MeshLambertMaterial({ color: 0x5a4030 }), n);
   const m = new THREE.Matrix4(), qq = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3(), tmpc = new THREE.Color();
-  world.trees.forEach((t, i) => {
+  treeList.forEach((t, i) => {
     const [x, y, h] = t; const z = terrainZ(x, y); const r = Math.max(1.0, h * 0.22);
     p.set(x, z + h * 0.2 + h * 0.4, -y); s.set(r, h * 0.8, r); m.compose(p, qq, s); cone.setMatrixAt(i, m);
     tmpc.setHSL(0.30 + Math.random() * 0.06, 0.45, 0.22 + Math.random() * 0.1); cone.setColorAt(i, tmpc);
@@ -273,7 +301,7 @@ function buildStaticScene() {
   for (const [wx, wz] of [[1.5, 0.95], [1.5, -0.95], [-1.5, 0.95], [-1.5, -0.95]]) add(new THREE.CylinderGeometry(0.42, 0.42, 0.45, 12), dark, wx, 0.42, wz).rotation.x = Math.PI / 2;
   carGroup.traverse(o => { o.castShadow = true; }); scene.add(carGroup);
   resizeRace();
-  $('stats').textContent = `${world.origin.name} · ${world.buildings.length} bygninger · ${world.trees.length} trær · høyder fra Kartverket laser`;
+  $('stats').textContent = `${world.origin.name} · ${world.buildings.length} bygninger · ${n} trær · Kart © OpenStreetMap · Høyder © Kartverket`;
 }
 function resizeRace() { const w = raceDiv.clientWidth, h = raceDiv.clientHeight; renderer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix(); }
 const bGeoCache = [];
@@ -400,6 +428,12 @@ const car = { x: 0, y: 0, hdg: 0, v: 0, steer: 0 };
 const keys = {};
 window.addEventListener('keydown', e => { const k = e.key.toLowerCase(); keys[k] = true; if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(k)) e.preventDefault(); if (k === 'r' && racing) resetCar(); });
 window.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+for (const [id, key] of [['tLeft', 'arrowleft'], ['tRight', 'arrowright'], ['tGas', 'arrowup'], ['tBrake', 'arrowdown']]) {
+  const el = $(id); const on = e => { e.preventDefault(); keys[key] = true; el.classList.add('down'); }, off = e => { e.preventDefault(); keys[key] = false; el.classList.remove('down'); };
+  el.addEventListener('pointerdown', on); el.addEventListener('pointerup', off); el.addEventListener('pointercancel', off); el.addEventListener('pointerleave', off);
+}
+$('tReset').addEventListener('pointerdown', e => { e.preventDefault(); if (racing) resetCar(); });
+if (MOBILE) $('touch').style.display = 'flex';
 let racing = false, lap = 1, lapStart = 0, lastLap = null, best = null, bestKey = '', prevP = 0, finished = false;
 let secTimes = [], secStart = 0, secIdx = 0, secDelta = [];
 function resetCar() {
@@ -469,6 +503,7 @@ function step(dt) {
   camera.lookAt(V(car.x + cs * 6, car.y + sn * 6, z + 1.2));
   if (qs.get('top')) { camera.position.set(car.x, z + Number(qs.get('top')), -car.y + 1); camera.lookAt(V(car.x, car.y, z)); }
   sun.position.set(car.x - 120, z + 220, -car.y - 80); sun.target.position.set(car.x, z, -car.y);
+  for (const c of terrainChunks) { const near = Math.hypot(car.x - c.cx, car.y - c.cy) < HI_RADIUS; c.hi.visible = near; c.lo.visible = !near; }
   $('spd').textContent = Math.round(Math.abs(v) * 3.6);
   $('lapTime').textContent = fmt((finished ? lastLap : performance.now() - lapStart));
   $('lapNo').textContent = (track.closed ? `Runde ${lap}` : (finished ? 'I mål · R for ny start' : 'Sprint')) + (onTrack ? '' : ' · utenfor banen');
@@ -479,7 +514,7 @@ let lastT = 0;
 function loop(t) { if (!racing) return; const dt = Math.min(0.05, (t - lastT) / 1000 || 0.016); lastT = t; step(dt); renderer.render(scene, camera); requestAnimationFrame(loop); }
 
 // ------------------------------------------------------------------ modusbytte
-const DRAW_BTNS = ['btnRace', 'btnUndo', 'btnClear', 'btnDemo', 'btnDemo2', 'btnHouse', 'btnSave', 'trackList', 'trackName', 'loopChk'];
+const DRAW_BTNS = ['btnRace', 'btnUndo', 'btnClear', 'btnDemo', 'btnDemo2', 'btnDemo3', 'btnHouse', 'btnSave', 'trackList', 'trackName', 'loopChk'];
 $('btnRace').onclick = () => {
   if (!renderer) buildStaticScene();
   buildTrack(routeNodes, loopMode);
@@ -499,6 +534,6 @@ $('btnBack').onclick = () => {
 // ------------------------------------------------------------------ test-URL-er
 const qs = new URLSearchParams(location.search);
 if (qs.get('demo')) {
-  (qs.get('demo') === '2' ? $('btnDemo2') : $('btnDemo')).click();
+  ({ '2': $('btnDemo2'), '3': $('btnDemo3') }[qs.get('demo')] || $('btnDemo')).click();
   if (!$('btnRace').disabled) { $('btnRace').click(); if (qs.get('drive')) { keys['w'] = true; setTimeout(() => { keys['w'] = false; }, Number(qs.get('drive')) * 1000); } }
 }
