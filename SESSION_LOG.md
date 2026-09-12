@@ -134,3 +134,4 @@ logger runder, sektorer, ghost, treff, banebredde og lukkegap. Dette avslørte a
 var synlige i skjermbilder. Dokumentert i README.
 
 **Ikke gjort.** Kamerafeilen i liggende mobilvisning. Mobil er nedprioritert etter Magnus' beskjed.
+- `6ea3c88 F1 start lights, best-lap ghost, vehicle garage, free roam, narrower track`
