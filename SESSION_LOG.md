@@ -1,8 +1,9 @@
 # SESSION_LOG — gateracer_web
 
 ## Neste prioritet
-Magnus tester på ekte telefon og deler løype-lenker. Hvis folk sender tider som skjermbilder: bygg toppliste
-(Supabase, krever bevisst beslutning om persondata). Ellers: ghost-bil av beste runde, «mal huset ditt».
+Magnus tester startlys, ghost og kjøretøyvalg på PC. Kjente svakheter: kameraet kan henge seg opp i liggende
+mobilvisning (Magnus rapporterte det, ikke fikset, mobil er nedprioritert). Videre: toppliste (Supabase, krever
+bevisst beslutning om persondata), «mal huset ditt».
 
 ---
 
@@ -95,3 +96,41 @@ av gårde «helt jelly» når man treffer dem.
 - `46474a1 Whole Kongsberg (5.5x5.4 km), LOD terrain, touch controls, GitHub Pages`
 - `f43cc76 Phone support and share links`
 - `337e0a6 Pedestrians with jelly ragdoll, landscape phone mode`
+
+### Runde 6 (12.09) — F1-følelse, startlys, ghost, kjøretøy, free roam
+Magnus: «funker knallbra på PC». Ønsket startlys, ghost av beste runde, mer F1-look, valgbare biler med spaker,
+færre hus revet, rett linje der det ikke er vei, free roam, og publikum som heier.
+
+**Gjort.**
+- **Startlys:** fem røde lyspar på en portal over startlinja (og i HUD), fylles ett per 0,9 s, tilfeldig pause
+  0,3–3 s, så slukkes alle. Gass før det = 2 sekunders straff (ikke omstart, som ga evig løkke).
+- **Ghost:** beste runde lagres som posisjonsspor (20 Hz, kvantisert) i localStorage per løype. Neste runde
+  spilles den av som gjennomsiktig bil, og HUD viser live differanse mot ghosten per baneposisjon.
+- **Kjøretøy:** fem presets (Formel 1, rask bil, tung bil, motorsykkel, sykkel) med egne 3D-modeller og
+  fysikkparametre, pluss «Egen bil» med fem spaker. Dra i en spake og presetet kopieres til din egen bil.
+- **F1-look:** ny F1-modell (halo, sidekasser, vinger med endeplater, oppheng), dashbord med gir og turtallslys,
+  FOV og kamerahøyde som følger farten, kameraskjelving, fartsvignett, dekkrøyk, sektorfarger (lilla/grønn/gul),
+  hvite kantlinjer langs banen.
+- **Smalere bane i stedet for husriving:** midtlinja skyves mot midten av korridoren mellom husene, og bredden
+  varierer 4,6–7,0 m. Hus fjernes bare når de står inne i minstebredden: 4 mot 13 før på sentrumsløypa.
+- **Rett linje / hopp:** «Rett linje» gir punkter utenfor veinettet, og manglende rute gir automatisk rett linje.
+  Ny lufthåndtering: bilen tar av over kuler og mister fart i landingen.
+- **Free roam:** kjør fritt uten løype/klokke, start på nærmeste ordentlige gate, minikart følger bilen.
+- **Publikum:** grupper på 3–8 som står og heier med flagg og bannere langs banen. Fotgjengere flyttet fra
+  banerelativ til veirelativ utplassering, så de finnes overalt (også i free roam), og hver person er nå én
+  sammenslått mesh av ytelsesgrunner.
+
+**Feil funnet og rettet underveis (alle funnet med den nye simuleringstesten, ikke synlige i skjermbilder):**
+1. Baneposisjonen låste seg til motsatt kjøreretning der løypa går tilbake langs samme gate. Nå søkes det i et
+   smalt vindu framover, og retningen må stemme med bilens.
+2. Hus kunne stå inne i den smale banen. Nå måles faktisk avstand til fotavtrykket (2,55 m fra midtlinja).
+3. Treff i husvegg ga full stopp. Nå skraper bilen langs veggen, og kiler den seg helt fast, bergers den tilbake.
+4. Startportalens bjelker sto langs banen i stedet for på tvers, og lampene vendte bort fra bilen.
+5. Lyssekvensen ble drevet av bildefrekvens og stoppet i headless. Nå drives all spilltid av en klokkefunksjon
+   som kan simuleres.
+
+**Ny testinfrastruktur.** `?sim=N&auto=V` kjører fysikken med fast tidssteg og virtuell klokke uten å tegne, og
+logger runder, sektorer, ghost, treff, banebredde og lukkegap. Dette avslørte alle fem feilene over; ingen av dem
+var synlige i skjermbilder. Dokumentert i README.
+
+**Ikke gjort.** Kamerafeilen i liggende mobilvisning. Mobil er nedprioritert etter Magnus' beskjed.

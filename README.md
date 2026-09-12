@@ -29,15 +29,27 @@ python3 -m http.server 8080
 Åpne http://localhost:8080/web/ i Chrome eller Safari.
 
 - Klikk på veier for å legge punkter, løypa snapper til gatenettet. «Sløyfe» av = sprint (punkt til punkt).
+- «Rett linje» ignorerer veinettet: tegn snarveier over jorder og hopp der det ikke finnes vei. Finner appen
+  ingen kjørbar rute mellom to punkter, lager den en rett linje av seg selv.
+- «Free roam»: kjør fritt i hele Kongsberg uten løype og uten klokke, med folk overalt.
 - Eksempler: «sentrum» (sløyfe), «Funkelia» (sprint opp Funkeliaveien til Skimore), «Teknologiparken» (sløyfe over Kongsberg bru).
 - Mobil: pinch-zoom på kartet, knapper på skjermen for gass/brems/sving. Skygger og halvparten av trærne er slått av,
   terrenget i full oppløsning bygges bare rundt bilen (330 m) og kastes når man kjører videre.
 - Lagre løyper med navn (lokalt i nettleseren), hent dem fra «Mine løyper…».
 - «Del lenke» kopierer en adresse som åpner spillet med løypa ferdig tegnet (`#t=L<node-id-er>&n=<navn>`).
   Bestetider ligger fortsatt bare lokalt hos hver spiller.
-- Hus som ligger i veien for banen fjernes automatisk. «Fjern hus» lar deg klikke bort flere manuelt (huskes).
-- Kjør: piltaster eller WASD, mellomrom = håndbrekk, R = tilbake til start.
-- Fotgjengere går langs banen og krysser av og til. Treffer du dem, flyr de av gårde (jelly-ragdoll) og telles i HUD.
+- Banen blir smalere (ned til 4,6 m) der husene står tett, og midtlinja skyves mot midten av korridoren.
+  Bare hus som står inne i minstebredden fjernes. «Fjern hus» lar deg klikke bort flere manuelt (huskes).
+- Kiler du deg fast, settes bilen automatisk tilbake på banen etter drøyt ett sekund.
+- Start: fem røde lys fylles ett for ett, og etter en tilfeldig pause slukkes de. Gass før det gir 2 sekunders straff.
+- Kjør: piltaster eller WASD, mellomrom = håndbrekk, R = ny start, G = garasje.
+- Garasje: fem ferdige kjøretøy (Formel 1, rask bil, tung bil, motorsykkel, sykkel) og spaker for toppfart,
+  akselerasjon, veigrep, bremser og vekt. Dra i en spake og du får din egen bil.
+- Ghost: setter du ny bestetid, lagres runden. Neste runde kjører en gjennomsiktig skygge av den foran deg,
+  og HUD-en viser hvor mange sekunder foran eller bak du ligger akkurat nå.
+- Kjører du over en kul i høy fart, tar bilen av. Landing koster fart.
+- Fotgjengere går langs gatene og krysser av og til. Treffer du dem, flyr de av gårde (jelly-ragdoll) og telles i HUD.
+  Langs banen står det også publikum i grupper og heier, med flagg og bannere.
 - På telefon skjules verktøylinjen under kjøring, spillet ber om fullskjerm og liggende format der nettleseren tillater det.
 - Tre sektorer med blå porter; HUD viser sektortid og differanse mot beste sektor. Minikart oppe til høyre.
 - Bestetid og beste sektorer per løype lagres lokalt i nettleseren.

@@ -9,10 +9,10 @@
   html, body { margin: 0; height: 100%; background: #0f1220; color: #eef0f6; font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; overflow: hidden; }
   body { display: flex; flex-direction: column; height: 100dvh; }
   #topbar { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 8px 14px; min-height: 36px; background: rgba(12,14,26,.94); border-bottom: 1px solid #262a40; z-index: 10; }
-  #topbar h1 { font-size: 16px; margin: 0 10px 0 0; font-weight: 800; letter-spacing: .3px; }
+  #topbar h1 { font-size: 16px; margin: 0 12px 0 0; font-weight: 800; letter-spacing: .3px; }
   #topbar .hint { color: #aab0c8; font-size: 13px; flex: 1 1 200px; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   button, select, input { background: #2a2f4a; color: #fff; border: 1px solid #3c4266; border-radius: 8px; padding: 7px 12px; font-size: 13px; cursor: pointer; }
-  input { cursor: text; width: 120px; }
+  input[type=text] { cursor: text; width: 120px; }
   button:hover { background: #363c5c; }
   button.primary { background: #e0333a; border-color: #ff5c62; font-weight: 700; }
   button.primary:disabled { background: #4a2a2c; border-color: #5a3a3c; color: #a08a8c; cursor: default; }
@@ -22,38 +22,74 @@
   #race { display: none; }
   canvas { display: block; }
   #map { width: 100%; height: 100%; cursor: crosshair; touch-action: none; }
-  #hud { position: absolute; left: 16px; top: 16px; background: rgba(12,14,26,.85); border-radius: 12px; padding: 10px 16px; min-width: 210px; pointer-events: none; }
-  #hud .big { font-size: 30px; font-weight: 800; }
-  #hud .row { font-size: 14px; color: #c8cde0; margin-top: 2px; }
+
+  /* garasje */
+  #garage { position: absolute; right: 14px; top: 14px; width: 290px; background: rgba(10,12,22,.96); border: 1px solid #343a58; border-radius: 14px; padding: 14px 16px; z-index: 8; display: none; }
+  #garage h3 { margin: 0 0 4px; font-size: 15px; }
+  #garage .sub { font-size: 12px; color: #8b91ad; margin-bottom: 10px; }
+  #garage .sl { margin: 9px 0; }
+  #garage .sl label { display: flex; justify-content: space-between; font-size: 12px; color: #c8cde0; margin-bottom: 3px; }
+  #garage .sl label b { color: #fff; font-variant-numeric: tabular-nums; }
+  #garage input[type=range] { width: 100%; padding: 0; height: 20px; background: none; border: none; cursor: grab; }
+  #garage .row { display: flex; gap: 8px; margin-top: 12px; }
+  #garage .row button { flex: 1; }
+  .bars { display: flex; gap: 3px; margin-top: 2px; }
+  .bars i { flex: 1; height: 4px; background: #2b3050; border-radius: 2px; }
+  .bars i.on { background: #e0333a; }
+
+  /* HUD */
+  #hud { position: absolute; left: 16px; top: 16px; background: rgba(10,12,22,.82); border-radius: 12px; padding: 10px 16px; min-width: 210px; pointer-events: none; border-left: 3px solid #e0333a; }
+  #hud .big { font-size: 30px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  #hud .row { font-size: 14px; color: #c8cde0; margin-top: 2px; font-variant-numeric: tabular-nums; }
   #hud .sec { font-size: 13px; color: #aab0c8; margin-top: 6px; font-variant-numeric: tabular-nums; }
   #hud .sec b { color: #fff; }
+  #delta { font-size: 20px; font-weight: 800; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .purple { color: #c56bff !important; } .green { color: #4ee07a !important; } .yellow { color: #ffd14a !important; }
   .neg { color: #4ee07a !important; } .pos { color: #ff6b6b !important; }
-  #speed { position: absolute; right: 16px; bottom: 16px; background: rgba(12,14,26,.85); border-radius: 12px; padding: 8px 18px; text-align: right; pointer-events: none; }
-  #speed .v { font-size: 44px; font-weight: 800; line-height: 1; }
-  #speed .u { font-size: 13px; color: #aab0c8; }
+
+  /* F1-dash */
+  #dash { position: absolute; left: 50%; transform: translateX(-50%); bottom: 14px; display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; }
+  #revs { display: flex; gap: 3px; }
+  #revs i { width: 15px; height: 9px; border-radius: 2px; background: #20243a; transition: background .04s; }
+  #dashbox { display: flex; align-items: flex-end; gap: 16px; background: rgba(10,12,22,.86); border-radius: 12px; padding: 6px 20px 8px; }
+  #gear { font-size: 46px; font-weight: 800; line-height: 1; width: 48px; text-align: center; }
+  #spdbox { text-align: right; }
+  #spd { font-size: 40px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+  #spdbox .u { font-size: 12px; color: #8b91ad; }
+  #vehName { font-size: 12px; color: #8b91ad; align-self: center; max-width: 110px; }
+
+  /* startlys */
+  #lights { position: absolute; left: 50%; top: 12%; transform: translateX(-50%); display: none; gap: 10px; padding: 12px 14px; background: rgba(6,7,14,.9); border-radius: 14px; pointer-events: none; }
+  #lights .col { display: flex; flex-direction: column; gap: 8px; }
+  #lights .lamp { width: 30px; height: 30px; border-radius: 50%; background: #2a1418; box-shadow: inset 0 0 6px #000; }
+  #lights .lamp.on { background: #ff2020; box-shadow: 0 0 18px #ff3030, inset 0 0 6px #ff8080; }
+
+  #streaks { position: absolute; inset: 0; pointer-events: none; opacity: 0; background: radial-gradient(ellipse 60% 55% at 50% 50%, rgba(0,0,0,0) 55%, rgba(0,0,0,.75) 100%); }
+  #speedwarn { position: absolute; inset: 0; pointer-events: none; opacity: 0; box-shadow: inset 0 0 120px rgba(220,40,40,.5); }
   #keys { position: absolute; left: 16px; bottom: 16px; font-size: 13px; color: #aab0c8; background: rgba(12,14,26,.7); padding: 8px 12px; border-radius: 10px; pointer-events: none; }
-  #msg { position: absolute; left: 50%; top: 18%; transform: translateX(-50%); font-size: 40px; font-weight: 800; text-shadow: 0 2px 12px #000; pointer-events: none; opacity: 0; transition: opacity .3s; white-space: nowrap; }
+  #msg { position: absolute; left: 50%; top: 26%; transform: translateX(-50%); font-size: 40px; font-weight: 800; text-shadow: 0 2px 12px #000; pointer-events: none; opacity: 0; transition: opacity .3s; white-space: nowrap; }
   #loading { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: #0f1220; z-index: 20; font-size: 18px; color: #aab0c8; }
   #stats { position: absolute; right: 16px; top: 236px; font-size: 12px; color: #8b91ad; background: rgba(12,14,26,.7); padding: 6px 10px; border-radius: 8px; pointer-events: none; }
+  #minimap { position: absolute; right: 16px; top: 16px; width: 210px; height: 210px; border-radius: 12px; background: rgba(12,14,26,.85); pointer-events: none; }
   #touch { position: absolute; left: 0; right: 0; bottom: 0; display: none; justify-content: space-between; padding: 0 12px 18px; pointer-events: none; }
   .tgrp { display: flex; gap: 10px; pointer-events: auto; }
   .tb { width: 74px; height: 74px; border-radius: 50%; font-size: 26px; background: rgba(20,24,40,.75); border: 2px solid #4a5480; touch-action: none; user-select: none; -webkit-user-select: none; }
   .tb.down { background: #e0333a; }
   #credit { position: fixed; right: 10px; bottom: 4px; font-size: 11px; color: #6c7290; z-index: 5; pointer-events: none; }
-  body.mobile #keys { display: none; } body.mobile #speed { bottom: 110px; } body.mobile #stats { display: none; }
+  body.mobile #keys { display: none; } body.mobile #stats { display: none; }
+  body.mobile #dash { bottom: 96px; } body.mobile #garage { width: 240px; }
   @media (max-height: 520px) {
     body.mobile #hud { padding: 4px 10px; min-width: 0; } body.mobile #hud .big { font-size: 20px; } body.mobile #hud .row, body.mobile #hud .sec { font-size: 11px; margin-top: 0; }
-    body.mobile #minimap { width: 96px; height: 96px; } body.mobile #speed { bottom: 90px; padding: 4px 12px; } body.mobile #speed .v { font-size: 26px; }
+    body.mobile #minimap { width: 96px; height: 96px; }
     body.mobile .tb { width: 60px; height: 60px; font-size: 20px; } body.mobile #touch { padding: 0 10px 10px; } body.mobile #btnBackM { bottom: 90px; }
+    body.mobile #gear { font-size: 28px; width: 32px; } body.mobile #spd { font-size: 26px; } body.mobile #revs i { width: 10px; height: 7px; }
+    body.mobile #lights .lamp { width: 20px; height: 20px; }
   }
   @media (max-width: 700px) {
     #topbar { padding: 6px 8px; gap: 5px; } #topbar h1 { display: none; } #topbar .hint { flex-basis: 100%; font-size: 12px; order: 9; }
-    button, select, input { padding: 6px 9px; font-size: 12px; } input { width: 90px; }
-    #hud { padding: 6px 10px; min-width: 150px; } #hud .big { font-size: 22px; } #hud .row, #hud .sec { font-size: 12px; }
-    #minimap { width: 120px; height: 120px; } #stats { display: none; } #credit { font-size: 9px; }
-    #speed .v { font-size: 30px; } #msg { font-size: 26px; }
+    button, select, input { padding: 6px 9px; font-size: 12px; } input[type=text] { width: 90px; }
+    #credit { font-size: 9px; }  #msg { font-size: 26px; }
   }
-  #minimap { position: absolute; right: 16px; top: 16px; width: 210px; height: 210px; border-radius: 12px; background: rgba(12,14,26,.85); pointer-events: none; }
 </style>
 </head>
 <body>
@@ -61,35 +97,62 @@
 <div id="topbar">
   <h1>GATERACER</h1>
   <span class="hint" id="hint"></span>
+  <select id="vehSel"></select>
+  <button id="btnGarage">Garasje</button>
   <select id="trackList"><option value="">Mine løyper…</option></select>
-  <input id="trackName" placeholder="Navn på løype">
+  <input type="text" id="trackName" placeholder="Navn på løype">
   <button id="btnSave" title="Lagre løypa i nettleseren">Lagre</button>
   <button id="btnShare" title="Kopier en lenke som åpner spillet med denne løypa">Del lenke</button>
   <button id="btnDemo">Eksempel: sentrum</button>
   <button id="btnDemo2">Eksempel: Funkelia</button>
   <button id="btnDemo3">Eksempel: Teknologiparken</button>
   <label class="chk"><input type="checkbox" id="loopChk" checked style="width:auto"> Sløyfe</label>
+  <label class="chk" title="Ignorer veinettet: tegn rett linje mellom punktene (snarveier og hopp)"><input type="checkbox" id="lineChk" style="width:auto"> Rett linje</label>
   <button id="btnHouse" title="Klikk på hus for å fjerne dem fra spillet">Fjern hus</button>
   <button id="btnUndo">Angre</button>
   <button id="btnClear">Nullstill</button>
+  <button id="btnFree" title="Kjør fritt rundt i hele Kongsberg">Free roam</button>
   <button id="btnRace" class="primary" disabled>Kjør!</button>
   <button id="btnBack" style="display:none">← Tegn ny løype</button>
 </div>
-<div id="draw"><canvas id="map"></canvas></div>
+<div id="draw">
+  <canvas id="map"></canvas>
+  <div id="garage">
+    <h3 id="garageTitle">Garasje</h3>
+    <div class="sub" id="garageSub"></div>
+    <div class="sl"><label>Toppfart <b id="vTop"></b></label><input type="range" id="sTop" min="30" max="360" step="5"><div class="bars" id="bTop"></div></div>
+    <div class="sl"><label>Akselerasjon <b id="vAcc"></b></label><input type="range" id="sAcc" min="20" max="170" step="1"><div class="bars" id="bAcc"></div></div>
+    <div class="sl"><label>Veigrep <b id="vGrip"></b></label><input type="range" id="sGrip" min="22" max="90" step="1"><div class="bars" id="bGrip"></div></div>
+    <div class="sl"><label>Bremser <b id="vBrake"></b></label><input type="range" id="sBrake" min="8" max="60" step="1"><div class="bars" id="bBrake"></div></div>
+    <div class="sl"><label>Vekt <b id="vMass"></b></label><input type="range" id="sMass" min="20" max="260" step="5"><div class="bars" id="bMass"></div></div>
+    <div class="row"><button id="btnGarageReset">Tilbakestill</button><button id="btnGarageClose" class="primary">Ferdig</button></div>
+  </div>
+</div>
 <div id="race" style="touch-action:none">
   <div id="hud">
     <div class="big" id="lapTime">0:00.00</div>
+    <div id="delta"></div>
     <div class="row" id="lapNo">Runde 1</div>
     <div class="row" id="lastLap">Sist: –</div>
     <div class="row" id="bestLap">Best: –</div>
-    <div class="row" id="hits" style="color:#ffb35c"></div>
     <div class="sec" id="sectors"></div>
+    <div class="row" id="hits" style="color:#ffb35c"></div>
   </div>
   <canvas id="minimap"></canvas>
   <button id="btnBackM" style="display:none; position:absolute; left:16px; bottom:118px; z-index:3">← Tegn</button>
   <div id="stats"></div>
-  <div id="speed"><div class="v" id="spd">0</div><div class="u">km/h</div></div>
-  <div id="keys">Piltaster / WASD kjører · R = tilbake til start · Mellomrom = håndbrekk</div>
+  <div id="streaks"></div>
+  <div id="speedwarn"></div>
+  <div id="dash">
+    <div id="revs"></div>
+    <div id="dashbox">
+      <div id="gear">N</div>
+      <div id="spdbox"><div id="spd">0</div><div class="u">km/h</div></div>
+      <div id="vehName"></div>
+    </div>
+  </div>
+  <div id="lights"></div>
+  <div id="keys">Piltaster / WASD kjører · mellomrom = håndbrekk · R = ny start · G = garasje</div>
   <div id="msg"></div>
   <div id="touch">
     <div class="tgrp"><button class="tb" id="tLeft">◀</button><button class="tb" id="tRight">▶</button></div>
