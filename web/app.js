@@ -785,7 +785,7 @@ function updatePeds(dt) {
         p.vy = (cdy * sp * 0.9 - ddy * 0.5 + (Math.random() - 0.5) * 3) * boost;
         p.vz = (4 + Math.abs(sp) * 0.45) * Math.min(2, boost);
         p.wx = (Math.random() - 0.5) * 16; p.wz = (Math.random() - 0.5) * 16; p.wy = (Math.random() - 0.5) * 7;
-        car.v *= clamp(1 - 0.07 / P.mass, 0.8, 0.99); hits++;
+        hits++;                                  // ingen fartstap: du skal ikke bremses av folk
         showMsg(['AU!', 'OI!', 'NEEEI!', 'HEI!', 'ÅÅÅ!', 'SORRY!'][hits % 6], 700);
       }
     } else if (p.mode === 'fly') {
@@ -924,7 +924,7 @@ function drawMinimap() {
 }
 
 // ------------------------------------------------------------------ styring
-const car = { x: 0, y: 0, z: 0, gz: 0, hdg: 0, v: 0, steer: 0, air: false, vz: 0, rate: 0, dist: 0 };
+const car = { x: 0, y: 0, z: 0, hdg: 0, v: 0, steer: 0, dist: 0 };
 const AUTO = qs.get('auto') ? Number(qs.get('auto')) : 0;
 const SIM = Number(qs.get('sim') || 0);
 let simT = 0;
@@ -1019,8 +1019,8 @@ let secTimes = [], secStart = 0, secIdx = 0, secDelta = [], secNew = [], freeSta
 function resetCar() {
   if (mode === 'free' && freeStart) { car.x = freeStart.x; car.y = freeStart.y; car.hdg = freeStart.hdg; }
   else { const p0 = track.pts[0], p1 = track.pts[Math.min(4, track.n - 1)]; car.x = p0[0]; car.y = p0[1]; car.hdg = Math.atan2(p1[1] - p0[1], p1[0] - p0[0]); }
-  car.v = 0; car.steer = 0; car.air = false; car.vz = 0; car.rate = 0; car.dist = 0; car.blockT = 0; ti = mode === 'race' ? 0 : -1;
-  car.z = car.gz = terrainZ(car.x, car.y);
+  car.v = 0; car.steer = 0; car.dist = 0; car.blockT = 0; ti = mode === 'race' ? 0 : -1;
+  car.z = terrainZ(car.x, car.y) + 0.18;
   camera.position.copy(V(car.x - Math.cos(car.hdg) * 11, car.y - Math.sin(car.hdg) * 11, car.z + 4));
   lapStart = secStart = NOW(); secTimes = []; secDelta = []; secNew = []; secIdx = 0; finished = false;
   startLights();
@@ -1030,12 +1030,23 @@ function rescue() {
     const p = track.pts[ti], d = track.dirAt(ti);
     car.x = p[0]; car.y = p[1]; car.hdg = Math.atan2(d[1], d[0]);
   } else {
-    let bs = null, bd = Infinity;
-    for (const g of rSegs) { const d = segDist(car.x, car.y, g[0], g[1], g[2], g[3]); if (d < bd) { bd = d; bs = g; } }
-    if (bs) { car.x = (bs[0] + bs[2]) / 2; car.y = (bs[1] + bs[3]) / 2; car.hdg = Math.atan2(bs[3] - bs[1], bs[2] - bs[0]); }
+    let bs = null, bd = Infinity, bt = 0;
+    const ci = Math.floor(car.x / RC), cj = Math.floor(car.y / RC);
+    for (let r = 1; r <= 8 && !bs; r++) {
+      for (let i = -r; i <= r; i++) for (let j = -r; j <= r; j++) {
+        const arr = rGrid.get(`${ci + i},${cj + j}`); if (!arr) continue;
+        for (const k of arr) {
+          const g = rSegs[k], dx = g[2] - g[0], dy = g[3] - g[1], L = dx * dx + dy * dy;
+          const t = L ? clamp(((car.x - g[0]) * dx + (car.y - g[1]) * dy) / L, 0, 1) : 0;
+          const d = Math.hypot(car.x - (g[0] + t * dx), car.y - (g[1] + t * dy));
+          if (d < bd) { bd = d; bs = g; bt = t; }
+        }
+      }
+    }
+    if (bs) { car.x = bs[0] + (bs[2] - bs[0]) * bt; car.y = bs[1] + (bs[3] - bs[1]) * bt; car.hdg = Math.atan2(bs[3] - bs[1], bs[2] - bs[0]); }
   }
-  car.v = 0; car.vz = 0; car.air = false; car.steer = 0; car.blockT = 0;
-  car.z = car.gz = terrainZ(car.x, car.y) + 0.18;
+  car.v = 0; car.steer = 0; car.blockT = 0;
+  car.z = terrainZ(car.x, car.y) + 0.18;
   showMsg('Tilbake på veien', 1200);
 }
 function showMsg(t, ms = 1500) { const m = $('msg'); m.textContent = t; m.style.opacity = t ? 1 : 0; clearTimeout(m._t); m._t = setTimeout(() => m.style.opacity = 0, ms); }
@@ -1116,19 +1127,19 @@ function step(dt) {
   const nt = nearestTrack(car.x, car.y, ti, car.hdg);
   if (nt.i >= 0) ti = nt.i;
   const onTrack = track ? (nt.i >= 0 && nt.d < track.w[nt.i] / 2 + 1.0) : false;
-  const onRoad = onTrack || roadClear(car.x, car.y) < 0;
+  const paved = roadClear(car.x, car.y) < 0;                  // faktisk asfalt (bare for støv)
+  const onRoad = mode === 'free' ? true : (onTrack || paved);
+  car.paved = paved;
   let v = car.v;
-  if (!car.air) {
-    if (th > 0) v += (v < -0.2 ? P.brake : P.acc * (1 - Math.abs(v) / P.vmax)) * dt;
-    else if (th < 0) v -= (v > 0.5 ? P.brake : P.acc * 0.35) * dt;
-    const drag = v * v * 0.0035 + 0.9 + (onRoad ? 0 : Math.abs(v) * 0.5 * P.off + 2 * P.off) + (brake ? P.brake * 0.8 : 0);
-    v -= Math.sign(v) * Math.min(Math.abs(v), drag * dt);
-  } else v -= Math.sign(v) * Math.min(Math.abs(v), (v * v * 0.0025 + 0.4) * dt);
+  if (th > 0) v += (v < -0.2 ? P.brake : P.acc * (1 - Math.abs(v) / P.vmax)) * dt;
+  else if (th < 0) v -= (v > 0.5 ? P.brake : P.acc * 0.35) * dt;
+  const drag = v * v * 0.0035 + 0.9 + (onRoad ? 0 : Math.abs(v) * 0.5 * P.off + 2 * P.off) + (brake ? P.brake * 0.8 : 0);
+  v -= Math.sign(v) * Math.min(Math.abs(v), drag * dt);
   v = clamp(v, -P.vmax * 0.18, P.vmax);
   const sp = Math.abs(v);
   const maxSteer = (onRoad ? P.grip : P.grip * 0.72) / (1 + sp / P.fall);
   car.steer += (st * maxSteer - car.steer) * Math.min(1, dt * 9);
-  car.hdg += (v / P.wb) * Math.tan(car.steer) * dt * (brake && sp > 5 ? 1.5 : 1) * (car.air ? 0.15 : 1);
+  car.hdg += (v / P.wb) * Math.tan(car.steer) * dt * (brake && sp > 5 ? 1.5 : 1);
   const cs = Math.cos(car.hdg), sn = Math.sin(car.hdg);
   const nx = car.x + cs * v * dt, ny = car.y + sn * v * dt;
   const blockedAt = (px, py) => {
@@ -1136,38 +1147,24 @@ function step(dt) {
     return false;
   };
   const outside = nx < T.x0 + 6 || nx > T.x1 - 6 || ny < T.y0 + 6 || ny > T.y1 - 6;
-  if (!outside && !blockedAt(nx, ny)) { car.dist += Math.abs(v) * dt; car.x = nx; car.y = ny; }
+  let movedOk = false;
+  if (!outside && !blockedAt(nx, ny)) { car.dist += Math.abs(v) * dt; car.x = nx; car.y = ny; movedOk = true; }
   else {
-    let slid = false;
     if (!outside) for (const lat of [0.45, -0.45, 0.95, -0.95, 1.5, -1.5]) {   // skrap langs veggen i stedet for å stoppe
       const ax = nx - sn * lat, ay = ny + cs * lat;
-      if (!blockedAt(ax, ay)) { car.x = ax; car.y = ay; car.dist += Math.abs(v) * dt; v *= 0.93; slid = true; if (sp > 10 && Math.random() < 0.4) puff(car.x - sn * lat, car.y + cs * lat, 0xd8d0c4); break; }
+      if (!blockedAt(ax, ay)) { car.x = ax; car.y = ay; car.dist += Math.abs(v) * dt; v *= 0.93; movedOk = true; if (sp > 10 && Math.random() < 0.4) puff(car.x - sn * lat, car.y + cs * lat, 0xd8d0c4); break; }
     }
-    if (!slid) {
+    if (!movedOk) {
       v = -v * 0.22; if (Math.abs(v) < 1) v = 0;
       if (sp > 12) { showMsg('SMELL!', 700); for (let i = 0; i < 3; i++) puff(car.x + cs * 2, car.y + sn * 2, 0xbbbbbb); }
-      car.blockT = (car.blockT || 0) + dt;
-      if (car.blockT > 1.2) { rescue(); v = 0; }           // kilt fast: sett bilen tilbake på banen
-    } else car.blockT = 0;
-  }
-  if (!outside && !blockedAt(car.x, car.y)) car.blockT = 0;
-  car.v = v;
-  // høyde, hopp og landing
-  const ride = 0.18, ground = terrainZ(car.x, car.y) + ride;
-  const rate = (ground - car.gz) / Math.max(dt, 1e-3);
-  if (!car.air) {
-    if (rate < car.rate - 7 && sp > 8) { car.air = true; car.vz = clamp(car.rate, -1, 13); }
-    else car.z = ground;
-    car.rate += (rate - car.rate) * Math.min(1, dt * 6);
-  } else {
-    car.vz -= 20 * dt; car.z += car.vz * dt; car.rate = 0;
-    if (car.z <= ground) {
-      car.z = ground; car.air = false;
-      if (car.vz < -7) { car.v *= 0.86; for (let i = 0; i < 4; i++) puff(car.x - cs * 1.5, car.y - sn * 1.5, 0xcfcfcf); showMsg('LANDING!', 600); }
-      car.vz = 0;
     }
   }
-  car.gz = ground;
+  // kilt fast: prøver spilleren å kjøre uten å komme noe sted, settes bilen tilbake på veien
+  if (movedOk || (th === 0 && Math.abs(v) < 0.5)) car.blockT = 0; else car.blockT = (car.blockT || 0) + dt;
+  if (car.blockT > 1.2) { rescue(); v = 0; }
+  car.v = v;
+  // bilen følger bakken hele tiden, uansett hvor ulendt det er
+  car.z = terrainZ(car.x, car.y) + 0.18;
   // sektorer og mål
   if (mode === 'race' && lights.phase === 'go' && nt.i >= 0 && !finished) {
     const now = NOW(), n = track.n, p = nt.i, [s1, s2] = track.sectors;
@@ -1190,18 +1187,19 @@ function step(dt) {
   const zf = terrainZ(car.x + cs * 2, car.y + sn * 2), zb = terrainZ(car.x - cs * 2, car.y - sn * 2), zl = terrainZ(car.x - sn, car.y + cs), zr = terrainZ(car.x + sn, car.y - cs);
   carGroup.position.set(car.x, car.z, -car.y);
   const lean = P.lean ? -car.steer * P.lean * clamp(sp / 14, 0, 1.6) : 0;
-  carGroup.rotation.set(Math.atan2(zr - zl, 2) + lean, car.hdg, car.air ? clamp(car.vz * 0.05, -0.35, 0.35) : Math.atan2(zf - zb, 4), 'YZX');
+  carGroup.rotation.set(Math.atan2(zr - zl, 2) + lean, car.hdg, Math.atan2(zf - zb, 4), 'YZX');
   // røyk: låste hjul, gress og luft
-  if (!car.air && ((brake && sp > 6) || (th < 0 && sp > 20) || (!onRoad && sp > 14))) {
-    if (Math.random() < dt * 40) puff(car.x - cs * 1.6 + sn * 0.8, car.y - sn * 1.6 - cs * 0.8, onRoad ? 0xe8e8e8 : 0xbfae8e);
-    if (Math.random() < dt * 40) puff(car.x - cs * 1.6 - sn * 0.8, car.y - sn * 1.6 + cs * 0.8, onRoad ? 0xe8e8e8 : 0xbfae8e);
+  if ((brake && sp > 6) || (th < 0 && sp > 20) || (!paved && !onTrack && sp > 14)) {
+    const col = paved || onTrack ? 0xe8e8e8 : 0xbfae8e;
+    if (Math.random() < dt * 40) puff(car.x - cs * 1.6 + sn * 0.8, car.y - sn * 1.6 - cs * 0.8, col);
+    if (Math.random() < dt * 40) puff(car.x - cs * 1.6 - sn * 0.8, car.y - sn * 1.6 + cs * 0.8, col);
   }
   updateSmoke(dt);
   // kamera: senker seg og trekkes ut med farten, rister litt
   const frac = clamp(sp / P.vmax, 0, 1);
   const fovT = 64 + 22 * frac; camera.fov += (fovT - camera.fov) * Math.min(1, dt * 3); camera.updateProjectionMatrix();
   const back = 7.6 + sp * 0.105 + P.camH * 1.2, high = 3.5 + P.camH - frac * 0.9;
-  camera.position.lerp(V(car.x - cs * back, car.y - sn * back, car.z + high), 1 - Math.exp(-dt * (car.air ? 3 : 5.5)));
+  camera.position.lerp(V(car.x - cs * back, car.y - sn * back, car.z + high), 1 - Math.exp(-dt * 5.5));
   const sh = frac * (onRoad ? 0.035 : 0.16);
   camera.position.x += (Math.random() - 0.5) * sh; camera.position.y += (Math.random() - 0.5) * sh; camera.position.z += (Math.random() - 0.5) * sh;
   camera.lookAt(V(car.x + cs * 7, car.y + sn * 7, car.z + 1.1));
@@ -1217,14 +1215,13 @@ function step(dt) {
   $('spd').textContent = Math.round(sp * 3.6);
   paintDash(v, frac);
   $('streaks').style.opacity = String(clamp((frac - 0.45) / 0.55, 0, 1) * 0.9);
-  $('speedwarn').style.opacity = String(car.air ? 0.5 : 0);
   if (mode === 'free') {
     $('lapTime').textContent = fmt(NOW() - lapStart);
-    $('lapNo').textContent = 'Free roam' + (onRoad ? '' : ' · utenfor veien') + (car.air ? ' · I LUFTA!' : '');
+    $('lapNo').textContent = 'Free roam';
     $('lastLap').textContent = ''; $('bestLap').textContent = ''; $('delta').textContent = '';
   } else {
     $('lapTime').textContent = fmt(finished ? lastLap : lapT);
-    $('lapNo').textContent = (track.closed ? `Runde ${lap}` : (finished ? 'I mål · R for ny start' : 'Sprint')) + (onTrack || onRoad ? '' : ' · utenfor banen') + (car.air ? ' · I LUFTA!' : '');
+    $('lapNo').textContent = (track.closed ? `Runde ${lap}` : (finished ? 'I mål · R for ny start' : 'Sprint')) + (onTrack || paved ? '' : ' · utenfor banen');
     $('lastLap').textContent = 'Sist: ' + (lastLap ? fmt(lastLap) : '–');
     $('bestLap').textContent = 'Best: ' + (best ? fmt(best.lap) : '–');
     if (ghost && ghostIdxT && nt.i >= 0 && lights.phase === 'go' && !finished) {
@@ -1294,14 +1291,14 @@ function runSim(steps) {
   const dt = 1 / 60;
   for (let k = 0; k < steps; k++) {
     simT += dt * 1000; step(dt);
-    if (k % 300 === 0) console.log('SIM ' + (`pos=${car.x.toFixed(0)},${car.y.toFixed(0)} t=${(simT / 1000).toFixed(1)} v=${(car.v * 3.6).toFixed(0)}km/h i=${nearestTrack(car.x, car.y).i} lap=${lap} sek=${secTimes.map(x => (x / 1000).toFixed(1)).join('/')} air=${car.air ? 1 : 0} treff=${hits}`));
+    if (k % 300 === 0) console.log('SIM ' + (`pos=${car.x.toFixed(0)},${car.y.toFixed(0)} t=${(simT / 1000).toFixed(1)} v=${(car.v * 3.6).toFixed(0)}km/h asfalt=${car.paved?1:0} lap=${lap} sek=${secTimes.map(x => (x / 1000).toFixed(1)).join('/')} treff=${hits}`));
   }
   console.log('SIM ' + `SLUTT lap=${lap} sist=${lastLap ? (lastLap / 1000).toFixed(2) : '-'} best=${best ? (best.lap / 1000).toFixed(2) : '-'} ghost=${ghost ? Math.floor(ghost.s.length / 3) + ' punkter' : 'nei'} opptak=${rec ? Math.floor(rec.length / 3) : 0} treff=${hits} publikum=${SPECS.length} hus_fjernet=${hidden.size} banebredde=${track ? (Math.min(...track.w).toFixed(1) + '-' + Math.max(...track.w).toFixed(1)) : '-'} luftstrekk=${jumps} lukkegap=${track ? Math.hypot(track.pts[0][0]-track.pts[track.n-1][0], track.pts[0][1]-track.pts[track.n-1][1]).toFixed(1) : '-'}m ruteledd=${routePts.length}`);
 }
 
 // ------------------------------------------------------------------ test-URL-er
 if (qs.get('garage')) $('btnGarage').click();
-if (qs.get('free')) { startRace('free'); if (qs.get('drive')) { keys['w'] = true; setTimeout(() => { keys['w'] = false; }, Number(qs.get('drive')) * 1000); } }
+if (qs.get('free')) { startRace('free'); if (SIM) { keys['w'] = true; runSim(SIM); } if (qs.get('drive')) { keys['w'] = true; setTimeout(() => { keys['w'] = false; }, Number(qs.get('drive')) * 1000); } }
 else if (qs.get('demo')) {
   ({ '2': $('btnDemo2'), '3': $('btnDemo3') }[qs.get('demo')] || $('btnDemo')).click();
   if (!$('btnRace').disabled) {

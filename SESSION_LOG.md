@@ -1,7 +1,7 @@
 # SESSION_LOG — gateracer_web
 
 ## Neste prioritet
-Magnus tester startlys, ghost og kjøretøyvalg på PC. Kjente svakheter: kameraet kan henge seg opp i liggende
+Magnus tester kjørefølelsen uten hopp på PC. Kjente svakheter: kameraet kan henge seg opp i liggende
 mobilvisning (Magnus rapporterte det, ikke fikset, mobil er nedprioritert). Videre: toppliste (Supabase, krever
 bevisst beslutning om persondata), «mal huset ditt».
 
@@ -135,3 +135,20 @@ var synlige i skjermbilder. Dokumentert i README.
 
 **Ikke gjort.** Kamerafeilen i liggende mobilvisning. Mobil er nedprioritert etter Magnus' beskjed.
 - `6ea3c88 F1 start lights, best-lap ghost, vehicle garage, free roam, narrower track`
+
+### Runde 7 (12.09) — hopp fjernet, free roam uten bremsing
+Magnus: bilen fløy opp i ulendt terreng og mistet bakkekontakt, «likte det bedre som det var før». Ville også
+kjøre like fort overalt i free roam, og ikke bremses av å treffe folk.
+
+**Gjort.**
+- All lufthåndtering fjernet. Bilen følger bakken hele tiden (`car.z = terrengZ + 0,18`). Dette reverserer
+  hoppene fra runde 6 med vilje, på Magnus' beskjed. «Rett linje» finnes fortsatt, men gir nå bare snarveier.
+- Free roam: `onRoad` er alltid sant, så gress og grus bremser ikke. Asfalt måles fortsatt separat, men bare
+  for å velge farge på støvet.
+- Fotgjengertreff koster ikke lenger fart. NB: Magnus' formulering var tvetydig («gjerne også at du blir bremset
+  ... det synes jeg er dumt, for da går det så sakte»); tolket som at fartstapet skulle bort. Flagget til ham.
+
+**Feil funnet og rettet.** Bergingen ved fastkiling utløstes aldri: telleren ble nullstilt hvert bilde så lenge
+bilens egen posisjon var klar, selv om ingen bevegelse var mulig. Nå nullstilles den bare når bilen faktisk
+flytter seg, eller når spilleren ikke gir gass. Bergingen bruker også veirutenettet i stedet for å skanne alle
+20 000 veisegmenter. Funnet med free roam-simuleringen (`?free=1&sim=3000`), som nå også holder gassen inne.

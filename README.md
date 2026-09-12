@@ -29,9 +29,10 @@ python3 -m http.server 8080
 Åpne http://localhost:8080/web/ i Chrome eller Safari.
 
 - Klikk på veier for å legge punkter, løypa snapper til gatenettet. «Sløyfe» av = sprint (punkt til punkt).
-- «Rett linje» ignorerer veinettet: tegn snarveier over jorder og hopp der det ikke finnes vei. Finner appen
-  ingen kjørbar rute mellom to punkter, lager den en rett linje av seg selv.
-- «Free roam»: kjør fritt i hele Kongsberg uten løype og uten klokke, med folk overalt.
+- «Rett linje» ignorerer veinettet: tegn snarveier over jorder og mark. Finner appen ingen kjørbar rute mellom
+  to punkter, lager den en rett linje av seg selv.
+- «Free roam»: kjør fritt i hele Kongsberg uten løype og uten klokke, med folk overalt. Her bremser ingenting:
+  gress og grus går like fort som asfalt.
 - Eksempler: «sentrum» (sløyfe), «Funkelia» (sprint opp Funkeliaveien til Skimore), «Teknologiparken» (sløyfe over Kongsberg bru).
 - Mobil: pinch-zoom på kartet, knapper på skjermen for gass/brems/sving. Skygger og halvparten av trærne er slått av,
   terrenget i full oppløsning bygges bare rundt bilen (330 m) og kastes når man kjører videre.
@@ -47,8 +48,9 @@ python3 -m http.server 8080
   akselerasjon, veigrep, bremser og vekt. Dra i en spake og du får din egen bil.
 - Ghost: setter du ny bestetid, lagres runden. Neste runde kjører en gjennomsiktig skygge av den foran deg,
   og HUD-en viser hvor mange sekunder foran eller bak du ligger akkurat nå.
-- Kjører du over en kul i høy fart, tar bilen av. Landing koster fart.
-- Fotgjengere går langs gatene og krysser av og til. Treffer du dem, flyr de av gårde (jelly-ragdoll) og telles i HUD.
+- Bilen holder alltid kontakt med bakken, uansett hvor ulendt terrenget er. Ingen hopp.
+- Fotgjengere går langs gatene og krysser av og til. Treffer du dem, flyr de av gårde (jelly-ragdoll) og telles i
+  HUD, men du mister ikke fart av det.
   Langs banen står det også publikum i grupper og heier, med flagg og bannere.
 - På telefon skjules verktøylinjen under kjøring, spillet ber om fullskjerm og liggende format der nettleseren tillater det.
 - Tre sektorer med blå porter; HUD viser sektortid og differanse mot beste sektor. Minikart oppe til høyre.
