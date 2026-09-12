@@ -152,3 +152,4 @@ kjøre like fort overalt i free roam, og ikke bremses av å treffe folk.
 bilens egen posisjon var klar, selv om ingen bevegelse var mulig. Nå nullstilles den bare når bilen faktisk
 flytter seg, eller når spilleren ikke gir gass. Bergingen bruker også veirutenettet i stedet for å skanne alle
 20 000 veisegmenter. Funnet med free roam-simuleringen (`?free=1&sim=3000`), som nå også holder gassen inne.
+- `0c48acf Keep the car on the ground, no speed loss off-road or from hits`
