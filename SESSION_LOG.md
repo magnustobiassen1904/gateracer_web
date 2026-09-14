@@ -192,3 +192,26 @@ diameter-spake eller tegn området selv, og anslått byggetid både ved valg og 
 
 **Nye verktøy.** `tools/gen_test.mjs` (bygger i Node med tider) og `tools/browser_test.py` (styrer ekte Chrome).
 - `7892628 Build a map of any place in Norway in the browser`
+
+### Runde 9 (14.09) — bug: kan ikke kjøre fremover på mobil
+Rapport fra en spiller via Magnus. Reprodusert med emulert telefon i `tools/browser_test.py`.
+
+**Årsak (bekreftet).** Berøringsknappene hadde fast størrelse (74 px) og tre knapper i høyre gruppe. I stående format
+fikk de ikke plass, og gassknappen, som lå ytterst, havnet utenfor skjermen: på 390 px var 22 av 74 px utenfor, på
+360 px var bare 22 px synlige. Venstre, høyre og brems virket, derfor opplevdes det som at bare «fremover» var død.
+
+**Mulig årsak i tillegg (ikke testbar her).** På iPhone kan et langt trykk utløse tekstmeny/forstørrelse og sende
+`pointercancel`, som slapp gassen etter ca. et halvt sekund. Liggende iPhone legger også hjørner og hjemstrek over
+kantene (siden bruker `viewport-fit=cover`).
+
+**Gjort.**
+- Knappene skalerer med skjermen (clamp på vw/vh) og holder seg innenfor safe-area på iPhone.
+- Gassknappen er størst og grønn. R er flyttet ut av raden og opp over gassen.
+- Touch-hendelser med `preventDefault` på telefoner (tåler langt trykk og flere fingre), pointer-hendelser for mus/penn.
+  `-webkit-touch-callout: none`, kontekstmeny blokkert. Alle kjøretaster slippes når appen mister fokus.
+- Eget stående oppsett: smalere dashbord, mindre HUD og minikart.
+
+**Verifisert** på 320, 360, 390 og 430 px stående og 667 og 844 px liggende: alle knapper innenfor skjermen, ingen
+overlapp, gassen holdes inne, gass og sving samtidig med to fingre, løft én finger og den andre holder. PC-regresjon uendret.
+
+**Ikke verifisert.** Ekte iPhone. Spilleren som rapporterte bør teste igjen.

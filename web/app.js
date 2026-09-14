@@ -948,11 +948,27 @@ window.addEventListener('keydown', e => {
   if (k === 'g') $('btnGarage').click();
 });
 window.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+// Berøringsknapper. På telefoner brukes touch-hendelser med preventDefault: da avbryter ikke iOS knappen ved langt
+// trykk (tekstmeny/forstørrelse), som ellers slipper gassen etter et halvt sekund. Mus og penn bruker pointer-hendelser.
+const HAS_TOUCH = 'ontouchstart' in window;
 for (const [id, key] of [['tLeft', 'arrowleft'], ['tRight', 'arrowright'], ['tGas', 'arrowup'], ['tBrake', 'arrowdown']]) {
-  const el = $(id); const on = e => { e.preventDefault(); keys[key] = true; el.classList.add('down'); }, off = e => { e.preventDefault(); keys[key] = false; el.classList.remove('down'); };
-  el.addEventListener('pointerdown', e => { el.setPointerCapture(e.pointerId); on(e); }); el.addEventListener('pointerup', off); el.addEventListener('pointercancel', off);
+  const el = $(id), fingers = new Set();
+  const press = () => { keys[key] = true; el.classList.add('down'); };
+  const release = () => { if (fingers.size) return; keys[key] = false; el.classList.remove('down'); };
+  el.addEventListener('touchstart', e => { e.preventDefault(); for (const t of e.changedTouches) fingers.add(t.identifier); press(); }, { passive: false });
+  const lift = e => { e.preventDefault(); for (const t of e.changedTouches) fingers.delete(t.identifier); release(); };
+  el.addEventListener('touchend', lift, { passive: false }); el.addEventListener('touchcancel', lift, { passive: false });
+  const isFingerPointer = e => HAS_TOUCH && e.pointerType === 'touch';
+  el.addEventListener('pointerdown', e => { if (isFingerPointer(e)) return; e.preventDefault(); el.setPointerCapture(e.pointerId); press(); });
+  const pUp = e => { if (isFingerPointer(e)) return; keys[key] = false; el.classList.remove('down'); };
+  el.addEventListener('pointerup', pUp); el.addEventListener('pointercancel', pUp);
+  el.addEventListener('contextmenu', e => e.preventDefault());
 }
-$('tReset').addEventListener('pointerdown', e => { e.preventDefault(); if (racing) resetCar(); });
+$('tReset').addEventListener('touchstart', e => { e.preventDefault(); if (racing) resetCar(); }, { passive: false });
+$('tReset').addEventListener('pointerdown', e => { if (HAS_TOUCH && e.pointerType === 'touch') return; e.preventDefault(); if (racing) resetCar(); });
+// slipp alle kjøretaster hvis appen mister fokus (telefonen låses, varsel dukker opp), så gassen ikke henger
+const releaseAll = () => { for (const k of ['arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'w', 'a', 's', 'd', ' ']) keys[k] = false; document.querySelectorAll('.tb.down').forEach(b => b.classList.remove('down')); };
+window.addEventListener('blur', releaseAll); document.addEventListener('visibilitychange', () => { if (document.hidden) releaseAll(); });
 if (MOBILE) { $('touch').style.display = 'flex'; document.body.classList.add('mobile'); }
 
 // ------------------------------------------------------------------ startlys
