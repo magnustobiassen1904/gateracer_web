@@ -215,3 +215,4 @@ kantene (siden bruker `viewport-fit=cover`).
 overlapp, gassen holdes inne, gass og sving samtidig med to fingre, løft én finger og den andre holder. PC-regresjon uendret.
 
 **Ikke verifisert.** Ekte iPhone. Spilleren som rapporterte bør teste igjen.
+- `eb848ea Fix gas button unreachable on phones; iOS-safe touch controls`
