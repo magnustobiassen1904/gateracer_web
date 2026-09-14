@@ -310,7 +310,6 @@ function showIntro() {
       $('intro').hidden = true; map.remove();
       resolve({ lat: c[0], lon: c[1], name: names[mode], shape });
     };
-    $('btnKongsberg').onclick = () => { $('intro').hidden = true; map.remove(); resolve({ prebuilt: true }); };
     redraw();
     setTimeout(() => map.invalidateSize(), 50);
     if (!COARSE) input.focus();

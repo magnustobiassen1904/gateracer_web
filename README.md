@@ -6,7 +6,7 @@ Tegn din egen racerbane på ekte gater, hvor som helst i Norge, og kjør den i n
 
 Startsiden er et kart over Norge. Søk opp en by, et sted eller en adresse, eller klikk på kartet. Velg området som
 en sirkel (diameter 0,5–5 km) eller tegn det selv, og trykk «Bygg». Kartet bygges i nettleseren på noen sekunder
-og lagres der, så det åpner med en gang neste gang. Kongsberg ligger ferdig bygget og åpner uten venting.
+og lagres der, så det åpner med en gang neste gang. Det ferdigbygde Kongsberg-kartet nås bare via gamle lenker (`?map=kongsberg`).
 
 ## Hvordan et kart bygges i nettleseren
 
