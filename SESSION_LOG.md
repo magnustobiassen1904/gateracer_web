@@ -248,3 +248,4 @@ etter 3,3 s (anslag 5 s) → løypa har samme form i spillet → «Ny løype» �
 området, 1,4 s. Free roam-fanen, tilbake fra free roam, mobilpanel og Kongsberg-regresjon (95,37 s) virker.
 
 **Vurdering: kart som lastes videre mens man kjører.** Mulig, men en stor ombygging (se svar til Magnus). Ikke startet.
+- `dccb8c5 Draw the track directly on the start map; fix sparse Kartverket files`
