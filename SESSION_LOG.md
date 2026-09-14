@@ -191,3 +191,4 @@ diameter-spake eller tegn området selv, og anslått byggetid både ved valg og 
 5. Node-testen ble avvist av Overpass uten User-Agent (406/429). Gjaldt bare testen, ikke nettleseren.
 
 **Nye verktøy.** `tools/gen_test.mjs` (bygger i Node med tider) og `tools/browser_test.py` (styrer ekte Chrome).
+- `7892628 Build a map of any place in Norway in the browser`
