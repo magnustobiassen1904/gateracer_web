@@ -220,3 +220,4 @@ overlapp, gassen holdes inne, gass og sving samtidig med to fingre, løft én fi
 ### Runde 10 (14.09) — «Kjør Kongsberg med en gang» fjernet
 Magnus ba om å fjerne knappen fra startsiden. Knappen, «eller»-skillet og tilhørende kode er fjernet. Ferdigbygd
 Kongsberg lastes fortsatt for gamle delte lenker og `?map=kongsberg`, så lenker folk allerede har fått, virker. Verifisert.
+- `9a2c365 Remove 'Kjør Kongsberg med en gang' from the start page`
