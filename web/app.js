@@ -1,13 +1,18 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { obtainWorld, AREA, areaQuery, worldReady } from './intro.js';
 
 // ------------------------------------------------------------------ data
 window.addEventListener('error', e => { document.getElementById('hint').textContent = 'Feil: ' + e.message; });
-const world = await (await fetch('../data/world.json')).json();
+const { world, TZ, TC } = await obtainWorld();              // introsiden, lagret kart, eller ferdigbygd Kongsberg
 const T = world.terrain;
-const TZ = new Uint16Array(await (await fetch('../data/' + T.bin)).arrayBuffer());
-const TC = new Uint8Array(await (await fetch('../data/' + T.cls)).arrayBuffer());
-document.getElementById('loading').style.display = 'none';
+if (qs0().get('dump')) {                                          // testkrok: statistikk om kartet
+  const hs = world.buildings.filter(b => b.src === 'lidar').map(b => b.h).sort((a, b) => a - b);
+  let zs = 0; for (let k = 0; k < TZ.length; k++) zs += TZ[k];
+  console.log('WORLD ' + JSON.stringify({ navn: world.origin.name, lidar: world.lidar, hus: world.buildings.length, hus_laser: hs.length, median_h: hs[hs.length >> 1], veier: world.roads.length, kjørbare: world.roads.filter(r => r.drive).length, trær: world.trees.length, arealer: world.areas.length, vann_celler: TC.reduce((a, c) => a + (c === 2), 0), nx: T.nx, ny: T.ny, zmin: T.zmin, z_snitt: +(T.zmin + zs / TZ.length / 10).toFixed(1), origo_z: world.origin.z }));
+}
+function qs0() { return new URLSearchParams(location.search); }
+const NS = AREA.prebuilt ? '' : AREA.id + ':';                 // lagrede løyper og tider hører til ett sted
 const $ = id => document.getElementById(id);
 const qs = new URLSearchParams(location.search);
 const hint = $('hint');
@@ -140,7 +145,7 @@ let view = { cx: (T.x0 + T.x1) / 2, cy: (T.y0 + T.y1) / 2, scale: 0 };
 let waypoints = [], routePts = [], loopMode = true, clickMode = 'route', freeLine = false, mode = 'race';
 function resizeMap() {
   mapC.width = mapC.clientWidth * devicePixelRatio; mapC.height = mapC.clientHeight * devicePixelRatio;
-  if (!view.scale) view.scale = Math.min(mapC.clientWidth / (T.x1 - T.x0), mapC.clientHeight / (T.y1 - T.y0)) * 0.98;
+  if (!view.scale) view.scale = Math.min(mapC.clientWidth / (T.x1 - T.x0), mapC.clientHeight / (T.y1 - T.y0)) * (world.bound ? 0.92 : 0.98);
   drawMap();
 }
 function w2s(x, y) { return [(x - view.cx) * view.scale + mapC.clientWidth / 2, -(y - view.cy) * view.scale + mapC.clientHeight / 2]; }
@@ -165,6 +170,11 @@ function drawMap() {
   ctx.setLineDash([]);
   if (s > 0.9) { ctx.fillStyle = '#c9cee4'; ctx.font = '11px sans-serif'; ctx.textAlign = 'center'; const seen = new Set();
     for (const r of world.roads) if (r.drive && r.n && !seen.has(r.n)) { const m = r.p[Math.floor(r.p.length / 2)]; const q = w2s(m[0], m[1]); if (q[0] > 0 && q[0] < W && q[1] > 0 && q[1] < H) { ctx.fillText(r.n, q[0], q[1] - 6); seen.add(r.n); } } }
+  if (world.bound) {                                              // område valgt på introsiden
+    ctx.save(); ctx.beginPath(); ctx.rect(0, 0, W, H); poly(world.bound); ctx.closePath();
+    ctx.fillStyle = 'rgba(8,10,18,.62)'; ctx.fill('evenodd');
+    poly(world.bound); ctx.closePath(); ctx.strokeStyle = '#e0333a'; ctx.lineWidth = 2; ctx.setLineDash([8, 6]); ctx.stroke(); ctx.setLineDash([]); ctx.restore();
+  }
   const o = w2s(0, 0); ctx.strokeStyle = '#ffd14a'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(o[0], o[1], 7, 0, Math.PI * 2); ctx.stroke();
   if (routePts.length > 1) {
     ctx.beginPath();
@@ -271,21 +281,21 @@ $('btnDemo3').onclick = () => setRoute([[340, -1140], [535, -1817], [900, -1500]
 // lagrede løyper
 function refreshTrackList() {
   const sel = $('trackList'); sel.innerHTML = '<option value="">Mine løyper…</option>';
-  store.get('gateracer_tracks', []).forEach((t, i) => { const o = document.createElement('option'); o.value = String(i); o.textContent = `${t.name} (${t.loop ? 'sløyfe' : 'sprint'})`; sel.appendChild(o); });
+  store.get('gateracer_tracks' + NS, []).forEach((t, i) => { const o = document.createElement('option'); o.value = String(i); o.textContent = `${t.name} (${t.loop ? 'sløyfe' : 'sprint'})`; sel.appendChild(o); });
 }
 $('btnSave').onclick = () => {
   const name = $('trackName').value.trim(); if (!name || waypoints.length < 2) { hint.textContent = 'Gi løypa et navn og tegn minst to punkter først.'; return; }
-  const list = store.get('gateracer_tracks', []).filter(t => t.name !== name); list.push({ name, waypoints, loop: loopMode }); store.set('gateracer_tracks', list); refreshTrackList(); hint.textContent = `Lagret «${name}».`;
+  const list = store.get('gateracer_tracks' + NS, []).filter(t => t.name !== name); list.push({ name, waypoints, loop: loopMode }); store.set('gateracer_tracks' + NS, list); refreshTrackList(); hint.textContent = `Lagret «${name}».`;
 };
 $('trackList').onchange = () => {
-  const t = store.get('gateracer_tracks', [])[Number($('trackList').value)]; if (!t) return;
+  const t = store.get('gateracer_tracks' + NS, [])[Number($('trackList').value)]; if (!t) return;
   waypoints = t.waypoints.map(wpFromAny).filter(Boolean); loopMode = t.loop; $('loopChk').checked = t.loop; $('trackName').value = t.name;
   rebuildRoute(); if (waypoints[0]) { view.cx = waypoints[0].x; view.cy = waypoints[0].y; drawMap(); }
 };
 $('lineChk').onchange = () => { freeLine = $('lineChk').checked; rebuildRoute(); };
 refreshTrackList();
 function trackKey() { return (loopMode ? 'L' : 'S') + waypoints.map(w => w.id != null ? w.id : `${Math.round(w.x)}_${Math.round(w.y)}`).join('-'); }
-function shareUrl() { const name = $('trackName').value.trim(); return location.origin + location.pathname + '#t=' + (loopMode ? 'L' : 'S') + waypoints.map(w => `${Math.round(w.x)}.${Math.round(w.y)}`).join('_') + (name ? '&n=' + encodeURIComponent(name) : ''); }
+function shareUrl() { const name = $('trackName').value.trim(); return location.origin + location.pathname + areaQuery() + '#t=' + (loopMode ? 'L' : 'S') + waypoints.map(w => `${Math.round(w.x)}.${Math.round(w.y)}`).join('_') + (name ? '&n=' + encodeURIComponent(name) : ''); }
 $('btnShare').onclick = async () => {
   if (waypoints.length < 2) { hint.textContent = 'Tegn en løype først.'; return; }
   const url = shareUrl(); history.replaceState(null, '', url);
@@ -311,6 +321,7 @@ function loadFromHash() {
 }
 window.addEventListener('resize', () => { resizeMap(); if (renderer) resizeRace(); });
 resizeMap(); rebuildRoute(); loadFromHash(); drawMap();
+worldReady();
 
 // ------------------------------------------------------------------ kjøretøy
 // top = km/h, acc = akselerasjon*10, grip = maks rattutslag*100, brake = m/s^2, mass = relativ*100
@@ -373,7 +384,7 @@ const terrainChunks = []; let makeHi = null;
 const MOBILE = new URLSearchParams(location.search).get('mobile') === '1' || matchMedia('(pointer: coarse)').matches || innerWidth < 900;
 const HI_RADIUS = MOBILE ? 330 : 700;
 const V = (x, y, z) => new THREE.Vector3(x, z, -y);
-const CLS_COL = [[118, 158, 86], [66, 104, 58], [64, 118, 170], [176, 172, 96], [110, 168, 80], [120, 140, 70], [150, 142, 132], [150, 150, 140]];
+const CLS_COL = [[118, 158, 86], [66, 104, 58], [64, 118, 170], [176, 172, 96], [110, 168, 80], [120, 140, 70], [150, 142, 132], [150, 150, 140], [88, 96, 90]];
 function buildStaticScene() {
   renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, MOBILE ? 1 : 2));
@@ -428,7 +439,7 @@ function buildStaticScene() {
   carGroup = buildVehicle(P.kind); scene.add(carGroup);
   initSmoke();
   resizeRace();
-  $('stats').textContent = `${world.origin.name} · ${world.buildings.length} bygninger · ${n} trær · Kart © OpenStreetMap · Høyder © Kartverket`;
+  $('stats').textContent = `${world.origin.name} · ${world.buildings.length} bygninger · ${n} trær · ${world.lidar === false ? 'hushøyder gjettet (Kartverket svarte ikke)' : 'høyder fra Kartverket laser'} · Kart © OpenStreetMap`;
 }
 // ------------------------------------------------------------------ kjøretøymodeller
 const M = (c, opt) => new THREE.MeshLambertMaterial({ color: c, flatShading: true, ...opt });
@@ -987,7 +998,7 @@ function jumpStart() { if (jumped) return; jumped = true; penalty = 2000; showMs
 // ------------------------------------------------------------------ ghost
 const GH_DT = 0.05;
 let ghost = null, ghostGroup = null, ghostIdxT = null, ghostPos = [0, 0], rec = null, recAcc = 0;
-function ghostKey() { return 'gateracer_ghost_' + trackKey(); }
+function ghostKey() { return 'gateracer_ghost_' + NS + trackKey(); }
 function loadGhost() {
   if (ghostGroup) { scene.remove(ghostGroup); ghostGroup = null; }
   ghost = mode === 'race' ? store.get(ghostKey(), null) : null;
@@ -1146,7 +1157,7 @@ function step(dt) {
     for (const [fx, fy] of [[0, 0], [2.1, 0.75], [2.1, -0.75], [-2.1, 0.75], [-2.1, -0.75]]) if (hitsBuilding(px + cs * fx - sn * fy, py + sn * fx + cs * fy)) return true;
     return false;
   };
-  const outside = nx < T.x0 + 6 || nx > T.x1 - 6 || ny < T.y0 + 6 || ny > T.y1 - 6;
+  const outside = nx < T.x0 + 6 || nx > T.x1 - 6 || ny < T.y0 + 6 || ny > T.y1 - 6 || (world.bound && !pip(nx, ny, world.bound));
   let movedOk = false;
   if (!outside && !blockedAt(nx, ny)) { car.dist += Math.abs(v) * dt; car.x = nx; car.y = ny; movedOk = true; }
   else {
@@ -1236,7 +1247,9 @@ let lastT = 0;
 function loop(t) { if (!racing) return; const dt = Math.min(0.05, (t - lastT) / 1000 || 0.016); lastT = t; step(dt); renderer.render(scene, camera); requestAnimationFrame(loop); }
 
 // ------------------------------------------------------------------ modusbytte
-const DRAW_BTNS = ['btnRace', 'btnFree', 'btnUndo', 'btnClear', 'btnDemo', 'btnDemo2', 'btnDemo3', 'btnShare', 'btnHouse', 'btnSave', 'trackList', 'trackName'];
+const DRAW_BTNS = ['btnPlace', 'btnRace', 'btnFree', 'btnUndo', 'btnClear', 'btnShare', 'btnHouse', 'btnSave', 'trackList', 'trackName'].concat(AREA.prebuilt ? ['btnDemo', 'btnDemo2', 'btnDemo3'] : []);
+if (!AREA.prebuilt) for (const id of ['btnDemo', 'btnDemo2', 'btnDemo3']) $(id).style.display = 'none';
+$('btnPlace').onclick = () => { location.href = location.pathname; };
 function startRace(m) {
   mode = m;
   PED_N = MOBILE ? 30 : (m === 'free' ? 96 : 72);
@@ -1244,7 +1257,7 @@ function startRace(m) {
   if (!renderer) buildStaticScene();
   if (m === 'race') {
     buildTrack(routePts, loopMode);
-    bestKey = 'gateracer_best_' + trackKey();
+    bestKey = 'gateracer_best_' + NS + trackKey();
     const b = store.get(bestKey, null); best = b && typeof b === 'object' ? b : (b ? { lap: Number(b), sectors: null } : null);
     loadGhost();
     hint.textContent = `${loopMode ? 'Sløyfe' : 'Sprint'} · ${P.name}${hidden.size ? ` · ${hidden.size} hus i veien fjernet` : ''}${ghost ? ' · ghost på' : ''}`;

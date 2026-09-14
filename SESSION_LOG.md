@@ -1,7 +1,8 @@
 # SESSION_LOG — gateracer_web
 
 ## Neste prioritet
-Magnus tester kjørefølelsen uten hopp på PC. Kjente svakheter: kameraet kan henge seg opp i liggende
+Magnus tester «søk på byen din» på PC og telefon, og deler lenken. Se etter: steder der Kartverket mangler laserdata,
+tette byer på 4–5 km (byggetid og bildefrekvens), og om anslaget på byggetid treffer på vanlig hjemmenett. Kjente svakheter: kameraet kan henge seg opp i liggende
 mobilvisning (Magnus rapporterte det, ikke fikset, mobil er nedprioritert). Videre: toppliste (Supabase, krever
 bevisst beslutning om persondata), «mal huset ditt».
 
@@ -153,3 +154,40 @@ bilens egen posisjon var klar, selv om ingen bevegelse var mulig. Nå nullstille
 flytter seg, eller når spilleren ikke gir gass. Bergingen bruker også veirutenettet i stedet for å skanne alle
 20 000 veisegmenter. Funnet med free roam-simuleringen (`?free=1&sim=3000`), som nå også holder gassen inne.
 - `0c48acf Keep the car on the ground, no speed loss off-road or from hits`
+
+### Runde 8 (14.09) — hele Norge: søk, sirkel eller tegn selv, bygges i nettleseren
+Magnus: søk på byen sin eller klikk på kartet, velg størrelse, og kartet bygges og åpnes. Underveis: sirkel med
+diameter-spake eller tegn området selv, og anslått byggetid både ved valg og under bygging.
+
+**Beslutninger.**
+- Byggingen flyttes til nettleseren (Web Worker). Ingen server, ingen kostnad, GitHub Pages holder. Mulig fordi
+  Kartverket (WCS, stedsnavn, adresser, kartfliser) og OSM-flisene tillater direkte henting fra nettsider (CORS), testet.
+- **Overpass droppet som datakilde.** Den offentlige serveren svarte med tidsavbrudd selv på en bitte liten
+  forespørsel hele formiddagen 14.09, og to reservespeil var nede. Byttet til OpenStreetMaps offisielle vektorfliser
+  (CDN, under et halvt sekund per flis), med VersaTiles som reserve. Pris: ingen hustyper/farger fra OSM (hushøyde
+  kommer uansett fra laser), og veinettet må kobles ved å slå sammen punkter.
+- **maps.mail.ru bevisst utelatt** (Overpass-speil drevet av VK i Russland) av personvernhensyn. Flagget.
+- Kartverket-WCS gir 0 over hav/utenfor Norge og float32-minimum der data mangler. Håndteres, med reserve til
+  åpne terrengfliser og gjettede hushøyder.
+- Område som sirkel (0,5–5 km, mobil maks 3 km) eller polygon. Utenfor området tegnes dempet terreng uten hus, trær
+  og veier, og bilen stoppes ved grensen.
+- Byggetidsanslag kalibrert mot testbygg i Node: 1 km 3–6 s, 2 km ca. 4 s, 4 km 7,7 s. I Chrome: 2 km 7,6 s.
+  Anslaget legger på margin for 5 MB/s hjemmenett og 3D-tegning. Under bygging vises brukt tid og gjenstående tid,
+  som går over fra anslag til faktisk tempo etter 15 %.
+- Løyper, bestetider og ghost lagres per sted. Kongsberg beholder gamle nøkler, så eksisterende tider overlever.
+
+**Verifisert.**
+- Hushøyder fra nettleserbygget mot Python-bygget for samme 1 km-område: 543 hus matchet, median avvik 0,00 m,
+  99 % under 0,5 m. Høyde i origo 171,4 m i begge.
+- Bygget Kongsberg (1, 2 og 4 km), Bergen, Tromsø og Gjøvik. Søk, sirkel, tegn selv, bygging, lagret kart (0,5 s
+  andre gang), delelenke med sted og løype, løypekjøring og free roam på generert kart, mobil-intro.
+- Regresjon: ferdigbygd Kongsberg gir identisk rundetid i simuleringen (95,37 s).
+
+**Feil funnet og rettet underveis.**
+1. Protobuf-dekoderen leste posisjonen før lengdefeltet (JavaScript evaluerer `pos + varint()` fra venstre).
+2. Tromsø fikk laveste høyde −1,3 × 10³⁸: Kartverkets nodata-verdi. Nå satt til 0.
+3. Bergen fikk nesten ikke vann: havet ligger i et eget `ocean`-lag. Lagt til, og havbunn under vann flates til 0.
+4. Stedsnavn fra tegnemodus lekket over til sirkelmodus.
+5. Node-testen ble avvist av Overpass uten User-Agent (406/429). Gjaldt bare testen, ikke nettleseren.
+
+**Nye verktøy.** `tools/gen_test.mjs` (bygger i Node med tider) og `tools/browser_test.py` (styrer ekte Chrome).

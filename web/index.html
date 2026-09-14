@@ -3,7 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<title>Gateracer — Kongsberg</title>
+<title>Gateracer</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <style>
   :root { color-scheme: dark; }
   html, body { margin: 0; height: 100%; background: #0f1220; color: #eef0f6; font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; overflow: hidden; }
@@ -67,7 +69,56 @@
   #streaks { position: absolute; inset: 0; pointer-events: none; opacity: 0; background: radial-gradient(ellipse 60% 55% at 50% 50%, rgba(0,0,0,0) 55%, rgba(0,0,0,.75) 100%); }
   #keys { position: absolute; left: 16px; bottom: 16px; font-size: 13px; color: #aab0c8; background: rgba(12,14,26,.7); padding: 8px 12px; border-radius: 10px; pointer-events: none; }
   #msg { position: absolute; left: 50%; top: 26%; transform: translateX(-50%); font-size: 40px; font-weight: 800; text-shadow: 0 2px 12px #000; pointer-events: none; opacity: 0; transition: opacity .3s; white-space: nowrap; }
-  #loading { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: #0f1220; z-index: 20; font-size: 18px; color: #aab0c8; }
+  /* lasting og bygging */
+  #loading { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: #0f1220; z-index: 60; padding: 16px; }
+  .lbox { width: 100%; max-width: 440px; }
+  #lTitle { font-size: 20px; font-weight: 800; margin-bottom: 14px; }
+  #lBarWrap { height: 8px; background: #20243a; border-radius: 4px; overflow: hidden; margin-bottom: 14px; }
+  #lBar { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #e0333a, #ff7a45); transition: width .3s; }
+  #lSteps { list-style: none; padding: 0; margin: 0 0 12px; font-size: 14px; color: #6c7290; }
+  #lSteps li { padding: 4px 0 4px 26px; position: relative; }
+  #lSteps li::before { content: ''; position: absolute; left: 4px; top: 9px; width: 10px; height: 10px; border-radius: 50%; border: 2px solid #3c4266; }
+  #lSteps li.now { color: #fff; } #lSteps li.now::before { border-color: #ff7a45; background: #ff7a45; animation: pulse 1s infinite; }
+  #lSteps li.done { color: #aab0c8; } #lSteps li.done::before { border-color: #3ad66a; background: #3ad66a; }
+  @keyframes pulse { 50% { opacity: .35; } }
+  #lText { font-size: 13px; color: #8b91ad; min-height: 18px; }
+  #lTime { font-size: 13px; color: #c8cde0; margin-top: 6px; font-variant-numeric: tabular-nums; min-height: 18px; }
+  #lErr { margin-top: 16px; padding: 12px 14px; background: #3a1d22; border: 1px solid #6a2c33; border-radius: 10px; }
+  #lErr p { margin: 0 0 10px; font-size: 14px; }
+
+  /* introside */
+  #intro { position: fixed; inset: 0; z-index: 50; background: #0f1220; }
+  #introMap { position: absolute; inset: 0; background: #0f1220; }
+  #introMap .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(.82) contrast(.92) saturate(.5); }
+  #introMap .leaflet-control-attribution { background: rgba(12,14,26,.8); color: #8b91ad; } #introMap .leaflet-control-attribution a { color: #aab0c8; }
+  #introPanel { position: absolute; left: 18px; top: 18px; bottom: 18px; width: 360px; overflow-y: auto; background: rgba(10,12,22,.95); border: 1px solid #2c3150; border-radius: 16px; padding: 20px 20px 16px; z-index: 1000; box-sizing: border-box; }
+  #introPanel h1 { margin: 0; font-size: 26px; font-weight: 900; letter-spacing: .5px; }
+  #introPanel h1 i { color: #e0333a; font-style: normal; }
+  #introPanel .lead { margin: 4px 0 18px; color: #aab0c8; font-size: 14px; line-height: 1.4; }
+  #introPanel .label { font-size: 11px; text-transform: uppercase; letter-spacing: .8px; color: #6c7290; margin: 16px 0 6px; }
+  #introPanel .small { font-size: 12px; color: #6c7290; margin: 6px 0 0; line-height: 1.4; }
+  .search { position: relative; }
+  #q { width: 100%; box-sizing: border-box; font-size: 15px; padding: 11px 12px; cursor: text; background: #171b2e; }
+  #qRes { position: absolute; left: 0; right: 0; top: 100%; margin: 4px 0 0; padding: 4px; list-style: none; background: #171b2e; border: 1px solid #3c4266; border-radius: 10px; z-index: 5; max-height: 320px; overflow-y: auto; }
+  #qRes li { padding: 8px 10px; border-radius: 7px; cursor: pointer; display: flex; flex-direction: column; }
+  #qRes li:hover { background: #2a2f4a; } #qRes li b { font-size: 14px; } #qRes li span { font-size: 12px; color: #8b91ad; }
+  #qRes li.none { color: #8b91ad; cursor: default; }
+  .pick { margin-top: 14px; padding: 10px 12px; border: 1px dashed #3c4266; border-radius: 10px; color: #6c7290; font-size: 13px; }
+  .pick.on { border-style: solid; border-color: #e0333a; color: #fff; } .pick b { display: block; font-size: 15px; } .pick span { font-size: 12px; color: #8b91ad; }
+  .chips { display: flex; gap: 6px; } .chips button { flex: 1; padding: 8px 0; } .chips button.active { background: #e0333a; border-color: #ff5c62; font-weight: 700; }
+  .slrow { display: flex; align-items: center; gap: 10px; margin-top: 10px; font-size: 13px; color: #c8cde0; }
+  .slrow input { flex: 1; padding: 0; background: none; border: none; accent-color: #e0333a; } .slrow b { min-width: 52px; text-align: right; font-variant-numeric: tabular-nums; }
+  #drawBox .chips { margin-top: 8px; }
+  .est { font-size: 13px !important; color: #aab0c8 !important; min-height: 18px; } .est b { color: #fff; } .est b.warn { color: #ff8a65; }
+  .chips button:disabled { opacity: .35; cursor: default; }
+  button.big { width: 100%; padding: 12px; font-size: 15px; margin-top: 14px; }
+  .sep { text-align: center; color: #4a5068; font-size: 12px; margin: 14px 0 0; }
+  button.recent { width: 100%; text-align: left; margin-bottom: 6px; display: flex; flex-direction: column; } button.recent span { font-size: 11px; color: #8b91ad; }
+  #introPanel .credit { font-size: 11px; color: #4a5068; margin-top: 18px; line-height: 1.5; }
+  @media (max-width: 700px) {
+    #introPanel { left: 0; right: 0; top: auto; bottom: 0; width: auto; max-height: 58dvh; border-radius: 16px 16px 0 0; padding: 14px 14px 10px; }
+    #introPanel h1 { font-size: 20px; } #introPanel .lead { margin-bottom: 10px; }
+  }
   #stats { position: absolute; right: 16px; top: 236px; font-size: 12px; color: #8b91ad; background: rgba(12,14,26,.7); padding: 6px 10px; border-radius: 8px; pointer-events: none; }
   #minimap { position: absolute; right: 16px; top: 16px; width: 210px; height: 210px; border-radius: 12px; background: rgba(12,14,26,.85); pointer-events: none; }
   #touch { position: absolute; left: 0; right: 0; bottom: 0; display: none; justify-content: space-between; padding: 0 12px 18px; pointer-events: none; }
@@ -92,9 +143,44 @@
 </style>
 </head>
 <body>
-<div id="loading">Laster kartdata …</div>
+<div id="loading">
+  <div class="lbox">
+    <div id="lTitle">Laster …</div>
+    <div id="lBarWrap" hidden><i id="lBar"></i></div>
+    <ol id="lSteps"></ol>
+    <div id="lText"></div>
+    <div id="lTime"></div>
+    <div id="lErr" hidden><p id="lErrMsg"></p><button id="lRetry" class="primary">Prøv igjen</button> <button id="lBack">Velg et annet sted</button></div>
+  </div>
+</div>
+<div id="intro" hidden>
+  <div id="introMap"></div>
+  <div id="introPanel">
+    <h1>GATE<i>RACER</i></h1>
+    <p class="lead">Tegn din egen racerbane på ekte gater, hvor som helst i Norge. Hus og trær får riktig høyde fra Kartverkets laserdata.</p>
+    <div class="search"><input id="q" type="search" placeholder="Søk etter by, sted eller adresse" autocomplete="off" spellcheck="false"><ul id="qRes" hidden></ul></div>
+    <div class="label">Område</div>
+    <div class="chips"><button id="tabCircle" class="active">Sirkel</button><button id="tabDraw">Tegn selv</button></div>
+    <div id="circleBox">
+      <p class="small">Søk eller klikk på kartet for å flytte sirkelen.</p>
+      <div class="slrow"><span>Diameter</span><input type="range" id="dSlider" min="0.5" max="5" step="0.1" value="2"><b id="dVal">2 km</b></div>
+    </div>
+    <div id="drawBox" hidden>
+      <p class="small" id="drawInfo"></p>
+      <div class="chips"><button id="btnUndoPt">Angre punkt</button><button id="btnClearPts">Nullstill</button></div>
+    </div>
+    <div id="pick" class="pick"><b id="pickName">Ingen sted valgt</b><span id="pickSub">Søk eller klikk på kartet</span></div>
+    <p class="small est" id="estimate"></p>
+    <button id="btnBuild" class="primary big" disabled>Bygg kart</button>
+    <div id="recent"></div>
+    <div class="sep">eller</div>
+    <button id="btnKongsberg" class="big">Kjør Kongsberg med en gang</button>
+    <p class="credit">Kart og høydedata © Kartverket (CC BY 4.0). Veier og hus © OpenStreetMap-bidragsytere (ODbL).</p>
+  </div>
+</div>
 <div id="topbar">
   <h1>GATERACER</h1>
+  <button id="btnPlace" title="Velg et annet sted i Norge">Bytt sted</button>
   <span class="hint" id="hint"></span>
   <select id="vehSel"></select>
   <button id="btnGarage">Garasje</button>

@@ -1,13 +1,43 @@
 # gateracer_web
 
-Tegn din egen racerbane på ekte gater og kjør den i nettleseren.
+Tegn din egen racerbane på ekte gater, hvor som helst i Norge, og kjør den i nettleseren.
 
 **Spill:** https://magnustobiassen1904.github.io/gateracer_web/
 
-Området er 5,5 × 5,4 km av Kongsberg: sentrum, Lågen, Funkelia og Skimore i vest, Madsebakken, Skarpåsveien og
-Kjennerudvannet i øst, Teknologiparken og Kongsberg bru i sør. Origo i Mauritz Hansens gate (59.665499, 9.640823).
+Startsiden er et kart over Norge. Søk opp en by, et sted eller en adresse, eller klikk på kartet. Velg området som
+en sirkel (diameter 0,5–5 km) eller tegn det selv, og trykk «Bygg». Kartet bygges i nettleseren på noen sekunder
+og lagres der, så det åpner med en gang neste gang. Kongsberg ligger ferdig bygget og åpner uten venting.
 
-## Hva som er ekte data
+## Hvordan et kart bygges i nettleseren
+
+`web/worldgen.js` kjører i en bakgrunnstråd (Web Worker) og gjør det samme som `tools/build_world.py`:
+
+1. **Kartdata:** henter OpenStreetMaps offisielle vektorfliser (zoom 14) for området. Reserve: VersaTiles.
+   Hus og veier kuttes mot flisekantene og mot området. Veier kobles til et veinett ved å slå sammen punkter som
+   ligger innen en halv meter av hverandre. Veier i tunnel tas ikke med.
+2. **Laserdata:** terrengmodell og overflatemodell fra Kartverkets WCS, 1–2,5 m oppløsning etter områdets størrelse,
+   hentet i biter på 1000 × 1000 piksler og lest med en egen liten GeoTIFF-leser (`readTiff`).
+3. **Hushøyder:** 80-persentilen av overflatemodellen inne i hvert hus, minus bakken.
+4. **Trær:** lokale topper i overflate minus terreng, tett nær vei og glissent i skog, maks 90 000.
+5. **Terreng:** 3 m rutenett, arealklasser (skog, vann, hav, jorder …), og en egen klasse for alt utenfor området.
+
+Kartverket gir høyde 0 over hav og utenfor Norge, og et enormt negativt tall der data mangler. Er over 97 % av
+området nøyaktig 0, eller svarer Kartverket ikke, faller byggeren tilbake til åpne terrengfliser (Terrarium, ca. 5 m)
+og gjettede hushøyder. Spilleren får beskjed.
+
+Bygde kart lagres i IndexedDB (de 5 siste). `GEN_VERSION` i `worldgen.js` og `intro.js` må økes når byggemetoden
+endres, ellers brukes gamle lagrede kart.
+
+Koordinater regnes om fra GPS til EUREF89 UTM 33 i `web/utm.js` (Krügers serier, under 1 mm avvik fra pyproj).
+
+### Lenker
+
+- Sirkel: `web/?lat=59.66550&lon=9.64082&d=2&by=Kongsberg`
+- Tegnet område: `web/?poly=lat,lon;lat,lon;lat,lon&by=Navn`
+- Ferdigbygd Kongsberg: `web/?map=kongsberg`. Gamle delte lenker uten sted åpner også Kongsberg.
+- En delt løype legges bak `#t=` og fungerer på alle steder.
+
+## Hva som er ekte data (ferdigbygd Kongsberg)
 
 | Element            | Kilde                                              | Hvordan                                                                 |
 |--------------------|----------------------------------------------------|-------------------------------------------------------------------------|
@@ -77,7 +107,30 @@ GitHub Pages fra `main`, rot. `index.html` i rot videresender til `web/`. Push t
 Kartdata i `data/` er avledet fra OpenStreetMap (© OpenStreetMap-bidragsytere, ODbL 1.0) og Kartverkets
 nasjonale høydemodell (CC BY 4.0). Attribusjon vises i spillet. Koden er Magnus Tobiassens.
 
+## Testing av kartbyggeren
+
+```
+node --experimental-detect-module tools/gen_test.mjs 59.665499 9.640823 1 Kongsberg   # bygger uten nettleser, med tider
+./venv/bin/python tools/browser_test.py                                              # hjelpeklasse for ekte Chrome
+```
+
+`tools/browser_test.py` styrer en ekte headless Chrome via DevTools-protokollen (krever `websocket-client` i venv).
+Den trengs fordi `--virtual-time-budget` ikke venter på bakgrunnstråder. `?dump=1` skriver statistikk om kartet til
+konsollen.
+
 ## Eksterne tjenester
 
-Kun ved bygging av data (ikke ved kjøring): Overpass API (OSM) og Kartverkets WCS.
-Ved kjøring lastes three.js fra jsdelivr CDN. Ingen brukerdata sendes noe sted.
+Når en spiller bruker spillet, kontakter nettleseren deres disse tjenestene direkte. Ingen av dem krever konto eller
+nøkkel, og spillet lagrer ingenting om spilleren utenfor spillerens egen nettleser.
+
+| Tjeneste | Hva | Hva tjenesten ser |
+|---|---|---|
+| Kartverket kartfliser (cache.kartverket.no) | Bakgrunnskart på startsiden | IP-adresse, hvilket område kartet viser |
+| Kartverket stedsnavn og adresser (ws.geonorge.no) | Søk og navn ved kartklikk | IP-adresse, søketeksten, klikkpunktet |
+| Kartverket høydedata (wcs.geonorge.no) | Laserdata | IP-adresse, området som bygges |
+| OpenStreetMap vektorfliser (vector.openstreetmap.org) | Veier, hus, skog, vann | IP-adresse, området som bygges |
+| VersaTiles (tiles.versatiles.org) | Reserve for OpenStreetMap-fliser | Samme, bare hvis OSM-flisene feiler |
+| Amazon S3 Terrain Tiles | Reserve for terreng hvis Kartverket svarer ikke | IP-adresse, området |
+| jsdelivr og cdnjs | three.js og Leaflet | IP-adresse |
+
+Bevisst utelatt: Overpass-speilet på maps.mail.ru (drives av VK, Russland).
