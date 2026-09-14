@@ -1,7 +1,8 @@
 # SESSION_LOG — gateracer_web
 
 ## Neste prioritet
-Magnus tester «søk på byen din» på PC og telefon, og deler lenken. Se etter: steder der Kartverket mangler laserdata,
+Magnus tester «tegn rett på kartet» på PC og telefon. Mulig neste store steg: kart som lastes videre mens man kjører
+(se vurdering i runde 11). Se etter: steder der Kartverket mangler laserdata,
 tette byer på 4–5 km (byggetid og bildefrekvens), og om anslaget på byggetid treffer på vanlig hjemmenett. Kjente svakheter: kameraet kan henge seg opp i liggende
 mobilvisning (Magnus rapporterte det, ikke fikset, mobil er nedprioritert). Videre: toppliste (Supabase, krever
 bevisst beslutning om persondata), «mal huset ditt».
@@ -221,3 +222,29 @@ overlapp, gassen holdes inne, gass og sving samtidig med to fingre, løft én fi
 Magnus ba om å fjerne knappen fra startsiden. Knappen, «eller»-skillet og tilhørende kode er fjernet. Ferdigbygd
 Kongsberg lastes fortsatt for gamle delte lenker og `?map=kongsberg`, så lenker folk allerede har fått, virker. Verifisert.
 - `9a2c365 Remove 'Kjør Kongsberg med en gang' from the start page`
+
+### Runde 11 (14.09) — tegn løypa rett på startkartet, ett lag mindre
+Magnus: «bare tegner rett i kartet … ikke først lager kart, også tegner løype. det er ett lag for mye.» Spurte også om
+kartet kan lastes videre mens man kjører.
+
+**Beslutninger.**
+- Startsiden henter OSM-vektorfliser for det synlige kartet fra zoom 13 og bygger veinettet i nettleseren. Klikk
+  snapper til nærmeste vei innen ca. 26 skjermpiksler, og løypa rutes live (Dijkstra). Klikk langt fra vei gir rett linje.
+- «Kjør!» bygger rektangelet rundt løypa + 200 m og starter løpet direkte. Et lagret område gjenbrukes hvis løypa
+  (med 80 m margin) får plass i det. Det minste passende velges.
+- Tegnesiden inne i spillet brukes ikke lenger for tegnede kart. Den er beholdt for ferdigbygd Kongsberg (gamle lenker).
+- Bestetider og ghost nøkles på løypas punkter i grader, og ghost-sporet lagrer områdets origo og forskyves ved
+  lasting. Da overlever tidene at en redigert løype gir et nytt område.
+- Free roam er en egen fane med sirkel og diameter-spake.
+- Kartbyggerens flis-kode flyttet til `web/osmtiles.js`, delt mellom startside og bygger. Verifisert identisk resultat.
+
+**Feil funnet og rettet.** Gjøvik fikk alltid gjettede hushøyder og brukte 20–28 s. Kartverket leverer «glisne»
+GeoTIFF-filer der fliser uten data (her over Mjøsa) har adresse 0. Leseren prøvde å lese dem, feilet, prøvde tre
+ganger og falt tilbake til reserveterreng. Nå leses manglende fliser som 0, og overflate 0 over land/innsjø regnes som
+manglende. Gjøvik: 3,2 s med laserdata. `GEN_VERSION` økt til 3 så kart bygget med feilen bygges på nytt.
+
+**Verifisert i ekte Chrome.** Søk Kongsberg → gater lastet på 1,2 s → fire klikk, alle snappet → «Kjør!» → i løpet
+etter 3,3 s (anslag 5 s) → løypa har samme form i spillet → «Ny løype» → løypa gjenopprettet → «Kjør!» gjenbrukte
+området, 1,4 s. Free roam-fanen, tilbake fra free roam, mobilpanel og Kongsberg-regresjon (95,37 s) virker.
+
+**Vurdering: kart som lastes videre mens man kjører.** Mulig, men en stor ombygging (se svar til Magnus). Ikke startet.

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { obtainWorld, AREA, areaQuery, worldReady } from './intro.js';
+import { toUTM, fromUTM } from './utm.js';
 
 // ------------------------------------------------------------------ data
 window.addEventListener('error', e => { document.getElementById('hint').textContent = 'Feil: ' + e.message; });
@@ -12,7 +13,9 @@ if (qs0().get('dump')) {                                          // testkrok: s
   console.log('WORLD ' + JSON.stringify({ navn: world.origin.name, lidar: world.lidar, hus: world.buildings.length, hus_laser: hs.length, median_h: hs[hs.length >> 1], veier: world.roads.length, kjørbare: world.roads.filter(r => r.drive).length, trær: world.trees.length, arealer: world.areas.length, vann_celler: TC.reduce((a, c) => a + (c === 2), 0), nx: T.nx, ny: T.ny, zmin: T.zmin, z_snitt: +(T.zmin + zs / TZ.length / 10).toFixed(1), origo_z: world.origin.z }));
 }
 function qs0() { return new URLSearchParams(location.search); }
-const NS = AREA.prebuilt ? '' : AREA.id + ':';                 // lagrede løyper og tider hører til ett sted
+const NS = AREA.prebuilt ? '' : 'g:';                          // tider og ghost for tegnede løyper følger løypa, ikke området
+const ORIGIN_UTM = AREA.prebuilt ? [0, 0] : toUTM(world.origin.lat, world.origin.lon);
+const wpLL = w => fromUTM(ORIGIN_UTM[0] + w.x, ORIGIN_UTM[1] + w.y);
 const $ = id => document.getElementById(id);
 const qs = new URLSearchParams(location.search);
 const hint = $('hint');
@@ -294,10 +297,21 @@ $('trackList').onchange = () => {
 };
 $('lineChk').onchange = () => { freeLine = $('lineChk').checked; rebuildRoute(); };
 refreshTrackList();
-function trackKey() { return (loopMode ? 'L' : 'S') + waypoints.map(w => w.id != null ? w.id : `${Math.round(w.x)}_${Math.round(w.y)}`).join('-'); }
-function shareUrl() { const name = $('trackName').value.trim(); return location.origin + location.pathname + areaQuery() + '#t=' + (loopMode ? 'L' : 'S') + waypoints.map(w => `${Math.round(w.x)}.${Math.round(w.y)}`).join('_') + (name ? '&n=' + encodeURIComponent(name) : ''); }
+function trackKey() {
+  if (!AREA.prebuilt) {
+    let h = 2166136261; const str = (loopMode ? 'L' : 'S') + waypoints.map(w => wpLL(w).map(v => v.toFixed(4)).join(',')).join(';');
+    for (let i = 0; i < str.length; i++) h = Math.imul(h ^ str.charCodeAt(i), 16777619) >>> 0;
+    return (loopMode ? 'L' : 'S') + h.toString(36) + '_' + waypoints.length;
+  }
+  return (loopMode ? 'L' : 'S') + waypoints.map(w => w.id != null ? w.id : `${Math.round(w.x)}_${Math.round(w.y)}`).join('-');
+}
+function shareUrl() {
+  const name = $('trackName').value.trim() || (location.hash.match(/n=([^&]+)/) || [])[1] && decodeURIComponent(location.hash.match(/n=([^&]+)/)[1]) || '';
+  if (!AREA.prebuilt && mode === 'free') return location.origin + location.pathname + areaQuery() + '#go=free';
+  return location.origin + location.pathname + areaQuery() + '#t=' + (loopMode ? 'L' : 'S') + waypoints.map(w => `${Math.round(w.x)}.${Math.round(w.y)}`).join('_') + (name ? '&n=' + encodeURIComponent(name) : '') + (AREA.prebuilt ? '' : '&go=1');
+}
 $('btnShare').onclick = async () => {
-  if (waypoints.length < 2) { hint.textContent = 'Tegn en løype først.'; return; }
+  if (waypoints.length < 2 && !(mode === 'free' && !AREA.prebuilt)) { hint.textContent = 'Tegn en løype først.'; return; }
   const url = shareUrl(); history.replaceState(null, '', url);
   try { await navigator.clipboard.writeText(url); hint.textContent = 'Lenke kopiert! Send den til noen, så får de løypa ferdig tegnet.'; }
   catch { hint.textContent = 'Lenken ligger nå i adressefeltet. Kopier den derfra.'; }
@@ -321,7 +335,7 @@ function loadFromHash() {
 }
 window.addEventListener('resize', () => { resizeMap(); if (renderer) resizeRace(); });
 resizeMap(); rebuildRoute(); loadFromHash(); drawMap();
-worldReady();
+if (AREA.prebuilt) worldReady();
 
 // ------------------------------------------------------------------ kjøretøy
 // top = km/h, acc = akselerasjon*10, grip = maks rattutslag*100, brake = m/s^2, mass = relativ*100
@@ -1020,6 +1034,10 @@ function loadGhost() {
   ghost = mode === 'race' ? store.get(ghostKey(), null) : null;
   ghostIdxT = null;
   if (!ghost || !ghost.s || ghost.s.length < 30) { ghost = null; return; }
+  if (ghost.o && (ghost.o[0] !== ORIGIN_UTM[0] || ghost.o[1] !== ORIGIN_UTM[1])) {           // annet område: forskyv sporet
+    const dx = Math.round((ghost.o[0] - ORIGIN_UTM[0]) * 20), dy = Math.round((ghost.o[1] - ORIGIN_UTM[1]) * 20);
+    ghost.s = ghost.s.map((v, i) => i % 3 === 0 ? v + dx : i % 3 === 1 ? v + dy : v);
+  }
   ghostGroup = buildVehicle(ghost.kind || 'f1', true); ghostGroup.visible = false; scene.add(ghostGroup);
   ghostIdxT = new Float64Array(track.n).fill(-1);
   let gi = 0;
@@ -1102,7 +1120,7 @@ function finishLap(now) {
   if (isBest) {
     best = { lap: total, sectors: bestSectors };
     showMsg((track.closed ? 'NY BESTETID ' : 'MÅL! NY BESTETID ') + fmt(total), 2600);
-    if (rec && rec.length > 60) { store.set(ghostKey(), { kind: P.kind, dur: total, s: rec }); loadGhost(); }
+    if (rec && rec.length > 60) { store.set(ghostKey(), { kind: P.kind, dur: total, s: rec, o: ORIGIN_UTM }); loadGhost(); }
   } else { best.sectors = bestSectors; showMsg((track.closed ? 'Runde ' : 'MÅL! ') + fmt(total) + '  ' + fmtD(total - best.lap), 2600); }
   store.set(bestKey, best);
   if (track.closed) { lap++; lapStart = secStart = now; secTimes = []; secDelta = []; secNew = []; secIdx = 0; rec = []; recAcc = 0; }
@@ -1306,6 +1324,11 @@ $('btnRace').onclick = () => startRace('race');
 $('btnFree').onclick = () => startRace('free');
 $('btnBackM').onclick = () => $('btnBack').click();
 $('btnBack').onclick = () => {
+  if (!AREA.prebuilt) {
+    const pts = waypoints.map(w => { const [la, lo] = wpLL(w); return `${la.toFixed(6)},${lo.toFixed(6)},${w.id != null ? 1 : 0}`; });
+    location.assign(location.pathname + (pts.length ? `#edit=${loopMode ? 'L' : 'S'};${pts.join(';')}` : `#c=${world.origin.lat.toFixed(5)},${world.origin.lon.toFixed(5)}`));
+    return;
+  }
   racing = false; $('topbar').style.display = ''; $('btnBackM').style.display = 'none';
   try { document.exitFullscreen?.().catch(() => {}); } catch {}
   raceDiv.style.display = 'none'; $('draw').style.display = 'block';
@@ -1323,6 +1346,20 @@ function runSim(steps) {
     if (k % 300 === 0) console.log('SIM ' + (`pos=${car.x.toFixed(0)},${car.y.toFixed(0)} t=${(simT / 1000).toFixed(1)} v=${(car.v * 3.6).toFixed(0)}km/h asfalt=${car.paved?1:0} lap=${lap} sek=${secTimes.map(x => (x / 1000).toFixed(1)).join('/')} treff=${hits}`));
   }
   console.log('SIM ' + `SLUTT lap=${lap} sist=${lastLap ? (lastLap / 1000).toFixed(2) : '-'} best=${best ? (best.lap / 1000).toFixed(2) : '-'} ghost=${ghost ? Math.floor(ghost.s.length / 3) + ' punkter' : 'nei'} opptak=${rec ? Math.floor(rec.length / 3) : 0} treff=${hits} publikum=${SPECS.length} hus_fjernet=${hidden.size} banebredde=${track ? (Math.min(...track.w).toFixed(1) + '-' + Math.max(...track.w).toFixed(1)) : '-'} luftstrekk=${jumps} lukkegap=${track ? Math.hypot(track.pts[0][0]-track.pts[track.n-1][0], track.pts[0][1]-track.pts[track.n-1][1]).toFixed(1) : '-'}m ruteledd=${routePts.length}`);
+}
+
+// ------------------------------------------------------------------ tegnede kart: rett i løpet
+if (!AREA.prebuilt) {
+  $('btnBack').textContent = '← Ny løype'; $('btnBackM').textContent = '← Ny løype';
+  DRAW_BTNS.splice(DRAW_BTNS.indexOf('btnShare'), 1);                 // del-knappen skal synes i løpet
+  $('btnShare').style.display = '';
+  const testing = ['free', 'demo', 'sim'].some(k => qs.has(k));
+  if (!testing) {
+    if (/[#&]go=free/.test(location.hash) || waypoints.length < 2) startRace('free');
+    else startRace('race');
+    if (waypoints.length < 2 && !/[#&]go=free/.test(location.hash)) hint.textContent = `Free roam · ${world.origin.name} · trykk «Ny løype» for å tegne en løype`;
+  }
+  requestAnimationFrame(() => requestAnimationFrame(worldReady));    // ladeskjermen bort når første bilde er tegnet
 }
 
 // ------------------------------------------------------------------ test-URL-er

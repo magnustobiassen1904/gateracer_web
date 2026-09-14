@@ -108,7 +108,8 @@
   .chips { display: flex; gap: 6px; } .chips button { flex: 1; padding: 8px 0; } .chips button.active { background: #e0333a; border-color: #ff5c62; font-weight: 700; }
   .slrow { display: flex; align-items: center; gap: 10px; margin-top: 10px; font-size: 13px; color: #c8cde0; }
   .slrow input { flex: 1; padding: 0; background: none; border: none; accent-color: #e0333a; } .slrow b { min-width: 52px; text-align: right; font-variant-numeric: tabular-nums; }
-  #drawBox .chips { margin-top: 8px; }
+  #trackBox .chips, .tabs { margin-top: 10px; } .tabs { margin-top: 14px; }
+  #introPanel .info { font-size: 13px; color: #c8cde0; margin: 10px 0 0; line-height: 1.45; min-height: 38px; } #introPanel .info b { color: #fff; }
   .est { font-size: 13px !important; color: #aab0c8 !important; min-height: 18px; } .est b { color: #fff; } .est b.warn { color: #ff8a65; }
   .chips button:disabled { opacity: .35; cursor: default; }
   button.big { width: 100%; padding: 12px; font-size: 15px; margin-top: 14px; }
@@ -171,21 +172,20 @@
   <div id="introMap"></div>
   <div id="introPanel">
     <h1>GATE<i>RACER</i></h1>
-    <p class="lead">Tegn din egen racerbane på ekte gater, hvor som helst i Norge. Hus og trær får riktig høyde fra Kartverkets laserdata.</p>
+    <p class="lead">Tegn løypa rett på kartet, hvor som helst i Norge. Den følger gatene, og hus og trær får riktig høyde fra Kartverkets laserdata.</p>
     <div class="search"><input id="q" type="search" placeholder="Søk etter by, sted eller adresse" autocomplete="off" spellcheck="false"><ul id="qRes" hidden></ul></div>
-    <div class="label">Område</div>
-    <div class="chips"><button id="tabCircle" class="active">Sirkel</button><button id="tabDraw">Tegn selv</button></div>
-    <div id="circleBox">
-      <p class="small">Søk eller klikk på kartet for å flytte sirkelen.</p>
-      <div class="slrow"><span>Diameter</span><input type="range" id="dSlider" min="0.5" max="5" step="0.1" value="2"><b id="dVal">2 km</b></div>
-    </div>
-    <div id="drawBox" hidden>
-      <p class="small" id="drawInfo"></p>
+    <div class="chips tabs"><button id="tabTrack" class="active">Tegn løype</button><button id="tabFree">Free roam</button></div>
+    <div id="trackBox">
+      <p class="info" id="trackInfo"></p>
+      <div class="chips"><button id="chipLoop" class="active">Sløyfe</button><button id="chipSprint">Sprint</button></div>
       <div class="chips"><button id="btnUndoPt">Angre punkt</button><button id="btnClearPts">Nullstill</button></div>
     </div>
-    <div id="pick" class="pick"><b id="pickName">Ingen sted valgt</b><span id="pickSub">Søk eller klikk på kartet</span></div>
+    <div id="freeBox" hidden>
+      <p class="info" id="freeInfo"></p>
+      <div class="slrow"><span>Diameter</span><input type="range" id="dSlider" min="0.5" max="5" step="0.1" value="2"><b id="dVal">2 km</b></div>
+    </div>
     <p class="small est" id="estimate"></p>
-    <button id="btnBuild" class="primary big" disabled>Bygg kart</button>
+    <button id="btnGo" class="primary big" disabled>Kjør!</button>
     <div id="recent"></div>
     <p class="credit">Kart og høydedata © Kartverket (CC BY 4.0). Veier og hus © OpenStreetMap-bidragsytere (ODbL).</p>
   </div>

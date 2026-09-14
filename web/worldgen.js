@@ -6,18 +6,15 @@
 // Området er en sirkel eller et polygon spilleren har tegnet. Utenfor det tegnes bare terreng.
 // Svarer Kartverket ikke (eller stedet mangler dekning), brukes grovere åpne terrengfliser og gjettede hushøyder.
 import { toUTM, fromUTM } from './utm.js';
+import { Z, EXT, DRIVE, WALK, sleep, fetchWithTimeout, geomParts, ringArea, clipRing, clipLine, fetchTiles, props } from './osmtiles.js';
 
-export const GEN_VERSION = 2;
+export const GEN_VERSION = 3;
 const CELL = 3;                                            // terrengoppløsning i spillet (m)
-const Z = 14, EXT = 4096;                                  // vektorflis-zoom og -oppløsning
-const VT = [z => `https://vector.openstreetmap.org/shortbread_v1/${z}`, z => `https://tiles.versatiles.org/tiles/osm/${z}`];
-const VT_SUFFIX = ['.mvt', ''];
 const WCS = 'https://wcs.geonorge.no/skwms1/wcs.hoyde-';
 export const resFor = side => side <= 1250 ? 1 : side <= 2250 ? 1.5 : side <= 4250 ? 2 : 2.5;   // laseroppløsning (m)
 
 const post = (m, transfer) => self.postMessage(m, transfer || []);
 const prog = (step, frac, text) => post({ type: 'progress', step, frac, text });
-const sleep = ms => new Promise(r => setTimeout(r, ms));
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
 
 self.onmessage = async e => {
@@ -28,130 +25,6 @@ self.onmessage = async e => {
     post({ type: 'error', message: String((err && err.message) || err) });
   }
 };
-
-async function fetchWithTimeout(url, opt, ms) {
-  const ac = new AbortController(), t = setTimeout(() => ac.abort(), ms);
-  try { return await fetch(url, { ...opt, signal: ac.signal }); } finally { clearTimeout(t); }
-}
-
-// ------------------------------------------------------------------ vektorfliser (Mapbox Vector Tile / Shortbread)
-function decodeMVT(buf) {
-  const b = new Uint8Array(buf), td = new TextDecoder(); let pos = 0;
-  const varint = () => { let r = 0, s = 1, c; do { c = b[pos++]; r += (c & 0x7f) * s; s *= 128; } while (c & 0x80); return r; };
-  const skip = wt => { if (wt === 0) varint(); else if (wt === 2) { const l = varint(); pos += l; } else if (wt === 5) pos += 4; else if (wt === 1) pos += 8; };
-  const str = () => { const l = varint(), v = td.decode(b.subarray(pos, pos + l)); pos += l; return v; };
-  const packed = () => { const l = varint(), end = pos + l, out = []; while (pos < end) out.push(varint()); return out; };
-  const value = () => {
-    const l = varint(), end = pos + l; let v = null;
-    while (pos < end) {
-      const key = varint(), f = key >> 3, wt = key & 7;
-      if (f === 1 && wt === 2) v = str();
-      else if (f === 2 && wt === 5) { v = new DataView(b.buffer, b.byteOffset + pos, 4).getFloat32(0, true); pos += 4; }
-      else if (f === 3 && wt === 1) { v = new DataView(b.buffer, b.byteOffset + pos, 8).getFloat64(0, true); pos += 8; }
-      else if (wt === 0) { const x = varint(); v = f === 6 ? ((x % 2) ? -(x + 1) / 2 : x / 2) : f === 7 ? !!x : x; }
-      else skip(wt);
-    }
-    pos = end; return v;
-  };
-  const layers = {};
-  while (pos < b.length) {
-    const key = varint(), f = key >> 3, wt = key & 7;
-    if (f !== 3 || wt !== 2) { skip(wt); continue; }
-    const llen = varint(), lend = pos + llen, L = { name: '', keys: [], values: [], feats: [], extent: 4096 };
-    while (pos < lend) {
-      const k2 = varint(), f2 = k2 >> 3, w2 = k2 & 7;
-      if (f2 === 1 && w2 === 2) L.name = str();
-      else if (f2 === 2 && w2 === 2) {
-        const flen = varint(), fend = pos + flen, F = { type: 0, tags: [], geom: [] };
-        while (pos < fend) {
-          const k3 = varint(), f3 = k3 >> 3, w3 = k3 & 7;
-          if (f3 === 2 && w3 === 2) F.tags = packed();
-          else if (f3 === 3 && w3 === 0) F.type = varint();
-          else if (f3 === 4 && w3 === 2) F.geom = packed();
-          else skip(w3);
-        }
-        pos = fend; L.feats.push(F);
-      }
-      else if (f2 === 3 && w2 === 2) L.keys.push(str());
-      else if (f2 === 4 && w2 === 2) L.values.push(value());
-      else if (f2 === 5 && w2 === 0) L.extent = varint();
-      else skip(w2);
-    }
-    pos = lend; layers[L.name] = L;
-  }
-  return layers;
-}
-// dekoder geometri-kommandoer til linjer/ringer i flisens pikselrom
-function geomParts(g) {
-  const parts = []; let x = 0, y = 0, cur = null, i = 0;
-  while (i < g.length) {
-    const cmd = g[i] & 7, cnt = g[i] >> 3; i++;
-    if (cmd === 7) { if (cur) cur.closed = true; continue; }
-    for (let k = 0; k < cnt; k++) {
-      const dx = g[i++], dy = g[i++]; x += (dx >> 1) ^ -(dx & 1); y += (dy >> 1) ^ -(dy & 1);
-      if (cmd === 1) { cur = []; parts.push(cur); }
-      cur.push([x, y]);
-    }
-  }
-  return parts;
-}
-const ringArea = r => { let a = 0; for (let i = 0, j = r.length - 1; i < r.length; j = i++) a += (r[j][0] - r[i][0]) * (r[j][1] + r[i][1]); return a / 2; };
-function clipRing(ring, lo, hi) {                        // Sutherland–Hodgman mot flisens kanter
-  let out = ring;
-  for (const [axis, bound, keepGreater] of [[0, lo, true], [0, hi, false], [1, lo, true], [1, hi, false]]) {
-    const inp = out; out = []; if (!inp.length) break;
-    for (let i = 0; i < inp.length; i++) {
-      const a = inp[(i + inp.length - 1) % inp.length], c = inp[i];
-      const ina = keepGreater ? a[axis] >= bound : a[axis] <= bound, inc = keepGreater ? c[axis] >= bound : c[axis] <= bound;
-      if (inc) { if (!ina) out.push(isect(a, c, axis, bound)); out.push(c); } else if (ina) out.push(isect(a, c, axis, bound));
-    }
-  }
-  return out;
-  function isect(a, c, axis, bound) { const t = (bound - a[axis]) / (c[axis] - a[axis]); return axis === 0 ? [bound, a[1] + (c[1] - a[1]) * t] : [a[0] + (c[0] - a[0]) * t, bound]; }
-}
-function clipLine(line, lo, hi) {                        // deler en linje i biter som ligger inne i flisen
-  const runs = []; let cur = null;
-  const inside = p => p[0] >= lo && p[0] <= hi && p[1] >= lo && p[1] <= hi;
-  for (let i = 0; i + 1 < line.length; i++) {
-    let [a, c] = [line[i], line[i + 1]], t0 = 0, t1 = 1;
-    const dx = c[0] - a[0], dy = c[1] - a[1];
-    let ok = true;
-    for (const [p, q] of [[-dx, a[0] - lo], [dx, hi - a[0]], [-dy, a[1] - lo], [dy, hi - a[1]]]) {
-      if (p === 0) { if (q < 0) { ok = false; break; } continue; }
-      const t = q / p; if (p < 0) { if (t > t1) { ok = false; break; } if (t > t0) t0 = t; } else { if (t < t0) { ok = false; break; } if (t < t1) t1 = t; }
-    }
-    if (!ok) { cur = null; continue; }
-    const s = [a[0] + dx * t0, a[1] + dy * t0], e = [a[0] + dx * t1, a[1] + dy * t1];
-    if (!cur || t0 > 0) { cur = [s]; runs.push(cur); }
-    cur.push(e);
-    if (t1 < 1 || !inside(c)) cur = null;
-  }
-  return runs.filter(r => r.length >= 2);
-}
-
-async function fetchTiles(tiles, onTile) {
-  const out = new Array(tiles.length); let next = 0;
-  const worker = async () => {
-    while (next < tiles.length) {
-      const idx = next++, [tx, ty] = tiles[idx];
-      let layers = null;
-      for (let src = 0; src < VT.length && !layers; src++) {
-        for (let a = 0; a < 2 && !layers; a++) {
-          try {
-            const res = await fetchWithTimeout(`${VT[src](Z)}/${tx}/${ty}${VT_SUFFIX[src]}`, {}, 30000);
-            if (res.status === 204 || res.status === 404) { layers = {}; break; }   // tom flis (sjø, fjell)
-            if (res.ok) layers = decodeMVT(await res.arrayBuffer());
-          } catch { /* nytt forsøk / neste kilde */ }
-          if (!layers) await sleep(1200 * (a + 1));
-        }
-      }
-      if (!layers) throw new Error('Fant ikke kartdata fra OpenStreetMap. Sjekk nettet og prøv igjen.');
-      out[idx] = layers; onTile();
-    }
-  };
-  await Promise.all(Array.from({ length: 6 }, worker));
-  return out;
-}
 
 // ------------------------------------------------------------------ Kartverket GeoTIFF
 function readTiff(buf) {
@@ -168,16 +41,22 @@ function readTiff(buf) {
   const W = tags[256][0], H = tags[257][0];
   if ((tags[259] || [1])[0] !== 1) throw new Error('komprimert TIFF');
   if (tags[258][0] !== 32 || (tags[339] || [1])[0] !== 3) throw new Error('uventet TIFF-format');
-  const out = new Float32Array(W * H);
+  const out = new Float32Array(W * H), len = buf.byteLength;
+  // «glisne» filer: deler uten data (typisk over vann) har adresse 0 og lengde 0 og skal bare stå som 0
+  const present = (off, bytes, need) => off > 0 && bytes > 0 && off + need <= len;
   if (tags[324]) {
-    const TW = tags[322][0], TH = tags[323][0], across = Math.ceil(W / TW);
+    const TW = tags[322][0], TH = tags[323][0], across = Math.ceil(W / TW), counts = tags[325] || [];
     tags[324].forEach((off, t) => {
+      if (!present(off, counts[t] ?? 1, TW * TH * 4)) return;
       const tx = (t % across) * TW, ty = Math.floor(t / across) * TH;
       for (let y = 0; y < TH && ty + y < H; y++) for (let x = 0; x < TW; x++) { if (tx + x < W) out[(ty + y) * W + tx + x] = dv.getFloat32(off + (y * TW + x) * 4, le); }
     });
   } else {
-    const rps = (tags[278] || [H])[0];
-    tags[273].forEach((off, s) => { for (let y = 0; y < rps && s * rps + y < H; y++) for (let x = 0; x < W; x++) out[(s * rps + y) * W + x] = dv.getFloat32(off + (y * W + x) * 4, le); });
+    const rps = (tags[278] || [H])[0], counts = tags[279] || [];
+    tags[273].forEach((off, s) => {
+      const rows = Math.min(rps, H - s * rps); if (!present(off, counts[s] ?? 1, rows * W * 4)) return;
+      for (let y = 0; y < rows; y++) for (let x = 0; x < W; x++) out[(s * rps + y) * W + x] = dv.getFloat32(off + (y * W + x) * 4, le);
+    });
   }
   return { W, H, data: out };
 }
@@ -255,8 +134,6 @@ function pip(x, y, poly) { let c = false; for (let i = 0, j = poly.length - 1; i
 function mulberry(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 
 // ------------------------------------------------------------------ tabeller
-const DRIVE = { motorway: 10, trunk: 9, primary: 8, secondary: 8, tertiary: 7, unclassified: 6, residential: 6, living_street: 5, service: 4, track: 3.5, busway: 6 };
-const WALK = { footway: 1.8, cycleway: 2.2, path: 1.5, pedestrian: 4, steps: 1.5, bridleway: 1.5 };
 const PAL = ['#b93c32', '#f0ece0', '#e6c85a', '#78828c', '#aa503c', '#ebebeb', '#c8aa78', '#5a646e', '#d9d2c5', '#8c1c1c'];
 const LAND = {
   forest: 'forest', wood: 'forest',
@@ -305,7 +182,6 @@ async function build({ lat, lon, shape, name }) {
   tiles.forEach(([tx, ty], ti) => {
     const layers = tileData[ti] || {};
     const toLocal = ([px, py]) => { const lo = (tx + px / EXT) / n2 * 360 - 180, la = Math.atan(Math.sinh(Math.PI * (1 - 2 * (ty + py / EXT) / n2))) * 180 / Math.PI; return loc(la, lo); };
-    const props = (L, F) => { const o = {}; for (let i = 0; i + 1 < F.tags.length; i += 2) o[L.keys[F.tags[i]]] = L.values[F.tags[i + 1]]; return o; };
     let bIdx = 0;
     const B = layers.buildings;
     if (B) for (const F of B.feats) {
@@ -371,7 +247,7 @@ async function build({ lat, lon, shape, name }) {
   try {
     [dtm, dom] = await Promise.all([kartverket('dtm', E0, N0, g, tick), kartverket('dom', E0, N0, g, tick)]);
     // manglende data: Kartverket bruker et enormt negativt tall (float32-minimum) eller NaN, typisk over sjø
-    for (let k = 0; k < dtm.length; k++) { const z = dtm[k]; if (!(z > -500 && z < 3000)) dtm[k] = 0; const s2 = dom[k]; if (!(s2 > -500 && s2 < 3500)) dom[k] = dtm[k]; }
+    for (let k = 0; k < dtm.length; k++) { const z = dtm[k]; if (!(z > -500 && z < 3000)) dtm[k] = 0; const s2 = dom[k]; if (!(s2 > -500 && s2 < 3500) || (s2 === 0 && dtm[k] > 1)) dom[k] = dtm[k]; }   // overflate 0 over land/innsjø = mangler
     let zeros = 0, tot = 0; for (let k = 0; k < dtm.length; k += 7) { tot++; if (dtm[k] === 0) zeros++; }
     if (zeros / tot > 0.97) throw new Error('ingen dekning');                // hav eller utenfor Norge gir bare 0
   } catch {

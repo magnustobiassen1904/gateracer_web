@@ -4,9 +4,15 @@ Tegn din egen racerbane på ekte gater, hvor som helst i Norge, og kjør den i n
 
 **Spill:** https://magnustobiassen1904.github.io/gateracer_web/
 
-Startsiden er et kart over Norge. Søk opp en by, et sted eller en adresse, eller klikk på kartet. Velg området som
-en sirkel (diameter 0,5–5 km) eller tegn det selv, og trykk «Bygg». Kartet bygges i nettleseren på noen sekunder
-og lagres der, så det åpner med en gang neste gang. Det ferdigbygde Kongsberg-kartet nås bare via gamle lenker (`?map=kongsberg`).
+Startsiden er et kart over Norge. Søk opp et sted eller zoom inn, og klikk rett på gatene der løypa skal gå. Løypa
+følger veinettet av seg selv (veiene hentes fra OpenStreetMap-flisene mens du zoomer). Trykk «Kjør!», så bygges
+området rundt løypa (omsluttende rektangel + 200 m) og løpet starter direkte. Er løypa innenfor et område som er
+bygget fra før, gjenbrukes det og løpet starter på et par sekunder. «Ny løype» i løpet tar deg tilbake til kartet med
+løypa klar til redigering. Fanen «Free roam» bygger en sirkel du velger og slipper deg løs.
+
+Løyper du har kjørt ligger under «Dine løyper». Bestetider og ghost følger løypa (punktenes posisjon i grader), ikke
+området, så de overlever at området bygges på nytt. Det gamle Kongsberg-kartet med egen tegneside nås bare via gamle
+lenker (`?map=kongsberg`).
 
 ## Hvordan et kart bygges i nettleseren
 
@@ -28,6 +34,9 @@ og gjettede hushøyder. Spilleren får beskjed.
 Bygde kart lagres i IndexedDB (de 5 siste). `GEN_VERSION` i `worldgen.js` og `intro.js` må økes når byggemetoden
 endres, ellers brukes gamle lagrede kart.
 
+Vektorflis-koden (henting, dekoding, klipping) ligger i `web/osmtiles.js` og brukes både av startsiden og byggeren.
+Kartverkets filer kan være «glisne»: deler uten data (typisk over vann) har adresse 0 og leses som 0.
+
 Koordinater regnes om fra GPS til EUREF89 UTM 33 i `web/utm.js` (Krügers serier, under 1 mm avvik fra pyproj).
 
 ### Lenker
@@ -35,7 +44,8 @@ Koordinater regnes om fra GPS til EUREF89 UTM 33 i `web/utm.js` (Krügers serier
 - Sirkel: `web/?lat=59.66550&lon=9.64082&d=2&by=Kongsberg`
 - Tegnet område: `web/?poly=lat,lon;lat,lon;lat,lon&by=Navn`
 - Ferdigbygd Kongsberg: `web/?map=kongsberg`. Gamle delte lenker uten sted åpner også Kongsberg.
-- En delt løype legges bak `#t=` og fungerer på alle steder.
+- En delt løype legges bak `#t=` og fungerer på alle steder. `&go=1` starter løpet direkte, `#go=free` starter free roam.
+- Startsiden med en løype til redigering: `web/#edit=L;lat,lon,1;lat,lon,1;…` (siste tall 1 = snappet til vei).
 
 ## Hva som er ekte data (ferdigbygd Kongsberg)
 

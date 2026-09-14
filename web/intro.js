@@ -1,8 +1,9 @@
 // intro.js — startsiden: velg sted i Norge, velg område (sirkel eller tegn selv), bygg kartet.
 // Eksporterer obtainWorld() som app.js venter på, og AREA som beskriver hvilket kart som er lastet.
 import { toUTM, fromUTM } from './utm.js';
+import { Z, EXT, DRIVE, fetchTiles, geomParts, clipLine, props, tileX, tileY, gpxToLL, llToGpx } from './osmtiles.js';
 
-const GEN_VERSION = 2;                       // må matche worldgen.js; øk når byggemetoden endres (tømmer lagrede kart)
+const GEN_VERSION = 3;                       // må matche worldgen.js; øk når byggemetoden endres (tømmer lagrede kart)
 const TYPE_RANK = { 'By': 0, 'Tettsted': 1, 'Bydel': 2, 'Tettsteddel': 3, 'Kommune': 4, 'Grend': 5, 'Adressenavn': 6, 'Adresse': 7 };
 const qs = new URLSearchParams(location.search);
 const $ = id => document.getElementById(id);
@@ -84,7 +85,7 @@ async function loadGenerated(a) {
   showLoading(`Laster ${a.name} …`, false);
   const cached = await idbGet(key);
   if (cached && cached.world && cached.tz && cached.tc) {
-    rememberRecent(key, AREA); hideLoading();
+    rememberRecent(key, AREA);
     return { world: cached.world, TZ: new Uint16Array(cached.tz), TC: new Uint8Array(cached.tc) };
   }
   const est = estimate(a.lat, a.lon, a.shape);
@@ -169,8 +170,11 @@ function readRecent() { try { return JSON.parse(localStorage.getItem('gateracer_
 function rememberRecent(key, a) {
   const m = measure(a.lat, a.lon, a.shape);
   let list = readRecent().filter(r => r.key !== key);
-  list.unshift({ key, q: areaQuery(a), name: a.name, size: a.shape.type === 'circle' ? `sirkel ${String(a.shape.d).replace('.', ',')} km` : `tegnet område, ${fmtKm2(m.area)}`, ts: Date.now() });
-  const drop = list.slice(5); list = list.slice(0, 5);
+  let bb;
+  if (a.shape.type === 'circle') { const [E, N] = toUTM(a.lat, a.lon), R = a.shape.d * 500, p = fromUTM(E - R, N - R), q = fromUTM(E + R, N + R); bb = [p[0], p[1], q[0], q[1]]; }
+  else { const la = a.shape.pts.map(p => p[0]), lo = a.shape.pts.map(p => p[1]); bb = [Math.min(...la), Math.min(...lo), Math.max(...la), Math.max(...lo)]; }
+  list.unshift({ key, q: areaQuery(a), name: a.name, center: [a.lat, a.lon], bb, size: a.shape.type === 'circle' ? `sirkel ${String(a.shape.d).replace('.', ',')} km` : `område ${fmtKm2(m.area)}`, ts: Date.now() });
+  const drop = list.slice(8); list = list.slice(0, 8);
   drop.forEach(r => idbDelete(r.key));
   try { localStorage.setItem('gateracer_recent', JSON.stringify(list)); } catch {}
 }
@@ -179,86 +183,211 @@ function rememberRecent(key, a) {
 function showIntro() {
   hideLoading();
   $('intro').hidden = false;
-  return new Promise(resolve => {
-    let center = null, mode = 'circle', d = 2, pts = [];
-    const names = { circle: 'Valgt område', draw: 'Valgt område' };   // hver modus har sitt eget stedsnavn
-    const layers = { shape: null, marker: null, verts: [] };
+  return new Promise(() => {                         // «Kjør» navigerer til spillet, så løftet trenger aldri å innfris
     const map = L.map('introMap', { zoomControl: false, minZoom: 4, maxZoom: 18, maxBounds: [[54, -8], [74, 40]], doubleClickZoom: false });
     if (!COARSE) L.control.zoom({ position: 'bottomright' }).addTo(map);
-    map.fitBounds([[57.8, 4.5], [71.2, 31.2]], COARSE ? { paddingBottomRight: [0, Math.round(innerHeight * 0.55)] } : { paddingTopLeft: [400, 20], paddingBottomRight: [20, 20] });
     L.tileLayer('https://cache.kartverket.no/v1/wmts/1.0.0/topograatone/default/webmercator/{z}/{y}/{x}.png',
       { maxZoom: 18, attribution: '© <a href="https://www.kartverket.no/" target="_blank" rel="noopener">Kartverket</a>' }).addTo(map);
-    const fly = bounds => map.flyToBounds(bounds, COARSE ? { paddingTopLeft: [20, 20], paddingBottomRight: [20, Math.round(innerHeight * 0.6)], maxZoom: 16, duration: 0.8 } : { paddingTopLeft: [420, 60], paddingBottomRight: [60, 60], maxZoom: 16, duration: 0.8 });
+    const PADS = COARSE ? { paddingTopLeft: [20, 20], paddingBottomRight: [20, Math.round(innerHeight * 0.6)] } : { paddingTopLeft: [420, 60], paddingBottomRight: [60, 60] };
+    const renderer = L.canvas({ padding: 0.3 });
 
-    const currentShape = () => mode === 'circle' ? (center ? { type: 'circle', d } : null) : (pts.length >= 3 ? { type: 'poly', pts: pts.map(p => [p[0], p[1]]) } : null);
-    const shapeCenter = () => mode === 'circle' ? center : (pts.length >= 3 ? centroidLL(pts) : null);
+    // ---------------- tilstand
+    let mode = 'track', loop = true, wps = [], route = [], routeLen = 0, name = 'Min løype', center = null, d = 2;
+    const layers = { route: null, marks: [], circle: null, roads: null };
 
+    // ---------------- veinett fra OpenStreetMap-fliser, hentes mens man zoomer
+    const net = { tiles: new Map(), nodes: new Map(), grid: new Map(), pending: 0 };
+    const GC = 1024;                                                  // rutenettcelle i globale flispiksler
+    const mPerGpx = lat => 40075016 * Math.cos(lat * Math.PI / 180) / (EXT * 2 ** Z);
+    function addNode(gx, gy) {
+      const k = `${gx},${gy}`; let n = net.nodes.get(k);
+      if (!n) { const [lat, lon] = gpxToLL(gx, gy); n = { k, gx, gy, lat, lon, adj: [] }; net.nodes.set(k, n); const c = `${Math.floor(gx / GC)},${Math.floor(gy / GC)}`; (net.grid.get(c) || net.grid.set(c, []).get(c)).push(n); }
+      return n;
+    }
+    function ingest(tx, ty, layers) {
+      const S = layers.streets; if (!S) return;
+      const sc = EXT / S.extent;
+      for (const F of S.feats) {
+        if (F.type !== 2) continue;
+        const pr = props(S, F); if (pr.tunnel || pr.rail || !DRIVE[pr.kind]) continue;
+        for (const line of geomParts(F.geom)) for (const run of clipLine(line, 0, S.extent)) {
+          let prev = null;
+          for (const [px, py] of run) {
+            const n = addNode(tx * EXT + Math.round(px * sc), ty * EXT + Math.round(py * sc));
+            if (prev && prev !== n) { const len = Math.hypot(n.gx - prev.gx, n.gy - prev.gy) * mPerGpx(n.lat); prev.adj.push([n, len]); n.adj.push([prev, len]); }
+            prev = n;
+          }
+        }
+      }
+    }
+    async function loadTiles() {
+      if (mode !== 'track' || map.getZoom() < 13) { paintInfo(); return; }
+      const b = map.getBounds(), x0 = tileX(b.getWest()), x1 = tileX(b.getEast()), y0 = tileY(b.getNorth()), y1 = tileY(b.getSouth());
+      const want = [];
+      for (let ty = y0; ty <= y1; ty++) for (let tx = x0; tx <= x1; tx++) if (!net.tiles.has(`${tx}/${ty}`)) want.push([tx, ty]);
+      if (!want.length || want.length > 40) { paintInfo(); return; }
+      want.forEach(([tx, ty]) => net.tiles.set(`${tx}/${ty}`, 'loading'));
+      net.pending += want.length; paintInfo();
+      try {
+        const data = await fetchTiles(want, () => {});
+        want.forEach(([tx, ty], i) => { ingest(tx, ty, data[i] || {}); net.tiles.set(`${tx}/${ty}`, 'done'); });
+      } catch { want.forEach(([tx, ty]) => net.tiles.delete(`${tx}/${ty}`)); }
+      net.pending -= want.length;
+      for (const w of wps) if (w.want && !w.node) snapWp(w, 6);      // punkter satt før veiene var lastet
+      recompute();
+    }
+    function nearestNode(lat, lon, maxM) {
+      const [gx, gy] = llToGpx(lat, lon), per = mPerGpx(lat), r = Math.ceil(maxM / per / GC);
+      let best = null, bd = maxM / per;
+      for (let i = -r; i <= r; i++) for (let j = -r; j <= r; j++) for (const n of net.grid.get(`${Math.floor(gx / GC) + i},${Math.floor(gy / GC) + j}`) || []) {
+        const dd = Math.hypot(n.gx - gx, n.gy - gy); if (dd < bd && n.adj.length) { bd = dd; best = n; }
+      }
+      return best;
+    }
+    function snapWp(w, maxM) { const n = nearestNode(w.lat, w.lon, maxM); if (n) { w.node = n; w.lat = n.lat; w.lon = n.lon; } }
+    function dijkstra(a, b) {
+      if (a === b) return [a];
+      const dist = new Map([[a, 0]]), prev = new Map(), heap = [[0, a]], done = new Set();
+      const push = it => { heap.push(it); let i = heap.length - 1; while (i) { const p = (i - 1) >> 1; if (heap[p][0] <= heap[i][0]) break; [heap[p], heap[i]] = [heap[i], heap[p]]; i = p; } };
+      const pop = () => { const top = heap[0], last = heap.pop(); if (heap.length) { heap[0] = last; let i = 0; for (;;) { const l = 2 * i + 1, r = l + 1; let m = i; if (l < heap.length && heap[l][0] < heap[m][0]) m = l; if (r < heap.length && heap[r][0] < heap[m][0]) m = r; if (m === i) break; [heap[m], heap[i]] = [heap[i], heap[m]]; i = m; } } return top; };
+      while (heap.length && done.size < 300000) {
+        const [dd, u] = pop(); if (done.has(u)) continue; done.add(u);
+        if (u === b) break;
+        for (const [v, w] of u.adj) { const nd = dd + w; if (nd < (dist.get(v) ?? Infinity)) { dist.set(v, nd); prev.set(v, u); push([nd, v]); } }
+      }
+      if (!dist.has(b)) return null;
+      const path = [b]; let u = b; while (u !== a) { u = prev.get(u); path.push(u); }
+      return path.reverse();
+    }
+    const meters = (a, b) => Math.hypot((b[0] - a[0]) * 111320, (b[1] - a[1]) * 111320 * Math.cos(a[0] * Math.PI / 180));
+    function recompute() {
+      route = []; routeLen = 0;
+      const m = loop ? wps.length : wps.length - 1;
+      if (wps.length >= 2) for (let i = 0; i < m; i++) {
+        const a = wps[i], b = wps[(i + 1) % wps.length];
+        const p = a.node && b.node ? dijkstra(a.node, b.node) : null;
+        const seg = p ? p.map(n => [n.lat, n.lon]) : [[a.lat, a.lon], [b.lat, b.lon]];   // ingen vei mellom? rett linje
+        route.push(...(route.length ? seg.slice(1) : seg));
+      }
+      for (let i = 1; i < route.length; i++) routeLen += meters(route[i - 1], route[i]);
+      redraw();
+    }
+
+    // ---------------- tegning på kartet
     function redraw() {
-      for (const l of [layers.shape, layers.marker, ...layers.verts]) if (l) map.removeLayer(l);
-      layers.shape = layers.marker = null; layers.verts = [];
-      const style = { color: '#e0333a', weight: 3, fillColor: '#e0333a', fillOpacity: 0.12, interactive: false };
-      if (mode === 'circle' && center) {
+      for (const l of [layers.route, layers.circle, ...layers.marks]) if (l) map.removeLayer(l);
+      layers.route = layers.circle = null; layers.marks = [];
+      if (mode === 'track') {
+        if (route.length >= 2) layers.route = L.polyline(route, { color: '#e0333a', weight: 6, opacity: 0.95, lineJoin: 'round', renderer, interactive: false }).addTo(map);
+        wps.forEach((w, i) => {
+          const col = i === 0 ? '#3ad66a' : (!loop && i === wps.length - 1 ? '#ffd14a' : (w.node ? '#ffffff' : '#7fd4ff'));
+          layers.marks.push(L.circleMarker([w.lat, w.lon], { radius: i === 0 ? 8 : 6, color: '#0f1220', weight: 2, fillColor: col, fillOpacity: 1, renderer, interactive: false }).addTo(map));
+        });
+      } else if (center) {
         const [E, N] = toUTM(center[0], center[1]), R = d * 500;
-        const ring = Array.from({ length: 72 }, (_, k) => fromUTM(E + R * Math.cos(k / 72 * 2 * Math.PI), N + R * Math.sin(k / 72 * 2 * Math.PI)));
-        layers.shape = L.polygon(ring, style).addTo(map);
-        layers.marker = L.circleMarker(center, { radius: 5, color: '#fff', weight: 2, fillColor: '#e0333a', fillOpacity: 1, interactive: false }).addTo(map);
-      } else if (mode === 'draw' && pts.length) {
-        layers.shape = (pts.length >= 3 ? L.polygon(pts, style) : L.polyline(pts, { ...style, dashArray: '6 6' })).addTo(map);
-        layers.verts = pts.map((p, i) => L.circleMarker(p, { radius: i === 0 ? 7 : 5, color: '#fff', weight: 2, fillColor: i === 0 ? '#3ad66a' : '#e0333a', fillOpacity: 1, interactive: false }).addTo(map));
+        layers.circle = L.polygon(Array.from({ length: 72 }, (_, k) => fromUTM(E + R * Math.cos(k / 36 * Math.PI), N + R * Math.sin(k / 36 * Math.PI))),
+          { color: '#e0333a', weight: 3, fillColor: '#e0333a', fillOpacity: 0.12, renderer, interactive: false }).addTo(map);
       }
       paintInfo();
     }
+    // området som bygges rundt løypa: omsluttende rektangel + 200 m margin, i Kartverkets rutenett
+    function trackArea() {
+      if (route.length < 2) return null;
+      const lats = route.map(p => p[0]), lons = route.map(p => p[1]);
+      const c = [(Math.min(...lats) + Math.max(...lats)) / 2, (Math.min(...lons) + Math.max(...lons)) / 2], [E0, N0] = toUTM(c[0], c[1]);
+      const xy = route.map(([la, lo]) => { const [e, n] = toUTM(la, lo); return [e - E0, n - N0]; });
+      const M = 200, x0 = Math.min(...xy.map(p => p[0])) - M, x1 = Math.max(...xy.map(p => p[0])) + M, y0 = Math.min(...xy.map(p => p[1])) - M, y1 = Math.max(...xy.map(p => p[1])) + M;
+      const pts = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]].map(([x, y]) => fromUTM(E0 + x, N0 + y).map(v => +v.toFixed(5)));
+      return { lat: centroidLL(pts)[0], lon: centroidLL(pts)[1], shape: { type: 'poly', pts }, bb: [Math.min(...lats), Math.min(...lons), Math.max(...lats), Math.max(...lons)] };
+    }
     function paintInfo() {
-      $('tabCircle').classList.toggle('active', mode === 'circle'); $('tabDraw').classList.toggle('active', mode === 'draw');
-      $('circleBox').hidden = mode !== 'circle'; $('drawBox').hidden = mode !== 'draw';
+      $('tabTrack').classList.toggle('active', mode === 'track'); $('tabFree').classList.toggle('active', mode === 'free');
+      $('trackBox').hidden = mode !== 'track'; $('freeBox').hidden = mode !== 'free';
+      $('chipLoop').classList.toggle('active', loop); $('chipSprint').classList.toggle('active', !loop);
       $('dVal').textContent = `${String(d).replace('.', ',')} km`;
-      const shape = currentShape(), c = shapeCenter();
-      const name = names[mode];
-      $('pickName').textContent = c ? name : 'Ingen sted valgt';
-      $('pickSub').textContent = c ? `${c[0].toFixed(4)}° N, ${c[1].toFixed(4)}° Ø` : (mode === 'circle' ? 'Søk eller klikk på kartet' : 'Klikk minst tre punkter på kartet');
-      $('pick').classList.toggle('on', !!c);
-      $('drawInfo').textContent = pts.length === 0 ? 'Klikk på kartet for å sette hjørner rundt området du vil kjøre i.' : pts.length < 3 ? `${pts.length} punkt${pts.length > 1 ? 'er' : ''}. Legg til minst ${3 - pts.length} til.` : `${pts.length} punkter.`;
+      const z = map.getZoom();
       let ok = false;
-      if (shape && c) {
-        const e = estimate(c[0], c[1], shape), tooBig = e.side > MAX_SIDE, tooSmall = e.area < 50000;
-        $('estimate').innerHTML = tooBig
-          ? `<b class="warn">For stort.</b> Området er ${(e.side / 1000).toFixed(1).replace('.', ',')} km på det bredeste. Maks er ${MAX_SIDE / 1000} km${COARSE ? ' på mobil' : ''}.`
-          : tooSmall ? '<b class="warn">For lite.</b> Gjør området litt større.'
-          : `<b>${fmtKm2(e.area)}</b> · ${e.mb} MB laserdata · byggetid <b>${fmtSec(e.sec)}</b>`;
-        ok = !tooBig && !tooSmall;
-      } else $('estimate').textContent = '';
-      $('btnBuild').disabled = !ok;
-      $('btnBuild').textContent = ok ? `Bygg ${name}` : 'Bygg kart';
+      if (mode === 'track') {
+        const unsnapped = wps.filter(w => !w.node).length;
+        $('trackInfo').innerHTML = z < 13 && wps.length === 0 ? 'Søk opp et sted eller <b>zoom inn</b> på kartet, og klikk på gatene for å tegne løypa.'
+          : wps.length === 0 ? (net.pending ? 'Henter gatene …' : 'Klikk på gatene der løypa skal gå. Den følger veiene av seg selv.')
+          : `${loop ? 'Sløyfe' : 'Sprint'} · <b>${(routeLen / 1000).toFixed(2).replace('.', ',')} km</b> · ${wps.length} punkter${unsnapped ? ` · ${unsnapped} utenfor vei (rett linje)` : ''}${net.pending ? ' · henter gater …' : ''}`;
+        const a = trackArea();
+        if (a && routeLen >= 150) {
+          const reuse = findArea(a.bb), e = estimate(a.lat, a.lon, a.shape);
+          if (e.side > MAX_SIDE) $('estimate').innerHTML = `<b class="warn">For stor løype.</b> Den må få plass innenfor ${MAX_SIDE / 1000} × ${MAX_SIDE / 1000} km${COARSE ? ' på mobil' : ''}.`;
+          else { $('estimate').innerHTML = reuse ? 'Området er bygget fra før · <b>starter med en gang</b>' : `Bygger ${fmtKm2(e.side * e.side)} rundt løypa · <b>${fmtSec(e.sec)}</b>`; ok = true; }
+        } else $('estimate').textContent = wps.length ? 'Legg til flere punkter (minst 150 m løype).' : '';
+        $('btnGo').disabled = !ok; $('btnGo').textContent = 'Kjør!';
+      } else {
+        $('freeInfo').textContent = center ? name : 'Søk eller klikk på kartet for å velge hvor du vil kjøre.';
+        if (center) { const e = estimate(center[0], center[1], { type: 'circle', d }), reuse = findArea(circleBB(center, d)); $('estimate').innerHTML = reuse ? 'Området er bygget fra før · <b>starter med en gang</b>' : `${fmtKm2(e.area)} · <b>${fmtSec(e.sec)}</b>`; ok = true; }
+        else $('estimate').textContent = '';
+        $('btnGo').disabled = !ok; $('btnGo').textContent = 'Kjør fritt';
+      }
+    }
+    const circleBB = (c, dk) => { const [E, N] = toUTM(c[0], c[1]), R = dk * 500, a = fromUTM(E - R, N - R), b = fromUTM(E + R, N + R); return [a[0], a[1], b[0], b[1]]; };
+    // gjenbruk et lagret område hvis løypa (med 80 m margin) får plass i det
+    function findArea(bb) {
+      const mLat = 80 / 111320, mLon = 80 / (111320 * Math.cos(bb[0] * Math.PI / 180));
+      const fits = readRecent().filter(r => r.bb && r.bb[0] <= bb[0] - mLat && r.bb[1] <= bb[1] - mLon && r.bb[2] >= bb[2] + mLat && r.bb[3] >= bb[3] + mLon);
+      fits.sort((p, q) => (p.bb[2] - p.bb[0]) * (p.bb[3] - p.bb[1]) - (q.bb[2] - q.bb[0]) * (q.bb[3] - q.bb[1]));
+      return fits[0] || null;
     }
     async function nameAt(lat, lon) {
       try {
         const dd = await (await fetch(`https://ws.geonorge.no/adresser/v1/punktsok?lat=${lat}&lon=${lon}&radius=1500&treffPerSide=1&utkoordsys=4258`)).json();
         const a = (dd.adresser || [])[0]; if (!a) return null;
-        const kom = titleCase(a.kommunenavn || '');
-        return kom && a.adressenavn ? `${a.adressenavn}, ${kom}` : (kom || a.adressenavn);
+        return titleCase(a.kommunenavn || a.poststed || '') || null;
       } catch { return null; }
     }
 
-    // sirkel / tegn selv
-    $('tabCircle').onclick = () => { mode = 'circle'; if (!center && pts.length >= 3) { center = centroidLL(pts); names.circle = names.draw; } redraw(); };
-    $('tabDraw').onclick = () => { mode = 'draw'; redraw(); };
+    // ---------------- handlinger
+    $('tabTrack').onclick = () => { mode = 'track'; redraw(); loadTiles(); };
+    $('tabFree').onclick = () => { mode = 'free'; if (!center) { const c = map.getCenter(); if (map.getZoom() >= 11) center = [c.lat, c.lng]; } redraw(); };
+    $('chipLoop').onclick = () => { loop = true; recompute(); };
+    $('chipSprint').onclick = () => { loop = false; recompute(); };
+    $('btnUndoPt').onclick = () => { wps.pop(); recompute(); };
+    $('btnClearPts').onclick = () => { wps = []; recompute(); };
     const slider = $('dSlider'); slider.max = String(MAX_SIDE / 1000); slider.value = String(d);
     slider.oninput = () => { d = Math.round(Number(slider.value) * 10) / 10; redraw(); };
-    $('btnUndoPt').onclick = () => { pts.pop(); redraw(); };
-    $('btnClearPts').onclick = () => { pts = []; redraw(); };
 
+    map.on('moveend', loadTiles);
+    window.__intro = { map, net, get wps() { return wps; }, get routeLen() { return routeLen; } };   // testhåndtak
     map.on('click', async e => {
       const lat = e.latlng.lat, lon = e.latlng.lng;
-      if (mode === 'circle') {
-        center = [lat, lon]; names.circle = 'Valgt område'; redraw();
-        const n = await nameAt(lat, lon); if (n && center && center[0] === lat) { names.circle = n; paintInfo(); }
-      } else {
-        pts.push([lat, lon]); redraw();
-        if (pts.length === 3 || (pts.length > 3 && names.draw === 'Valgt område')) { const c = centroidLL(pts), n = await nameAt(c[0], c[1]); if (n) { names.draw = n; paintInfo(); } }
-      }
+      if (mode === 'free') { center = [lat, lon]; name = 'Valgt område'; redraw(); const n = await nameAt(lat, lon); if (n) { name = n; paintInfo(); } return; }
+      if (map.getZoom() < 13) { map.flyTo(e.latlng, 15, { duration: 0.6 }); return; }
+      const tol = 26 * 40075016 * Math.cos(lat * Math.PI / 180) / (256 * 2 ** map.getZoom());   // ca. 26 skjermpiksler
+      const w = { lat, lon, node: null, want: true };
+      snapWp(w, Math.max(8, tol));
+      const last = wps[wps.length - 1];
+      if (last && last.node && last.node === w.node) return;
+      wps.push(w); recompute();
+      if (wps.length === 1 || name === 'Min løype') { const n = await nameAt(lat, lon); if (n) { name = `Løype i ${n}`; } }
     });
 
-    // søk
+    $('btnGo').onclick = () => {
+      if (mode === 'free') {
+        if (!center) return;
+        const reuse = findArea(circleBB(center, d));
+        const q = reuse ? reuse.q : areaQuery({ lat: center[0], lon: center[1], name, shape: { type: 'circle', d: Math.max(0.5, d) } });
+        location.assign(location.pathname + q + '#go=free');
+        return;
+      }
+      const a = trackArea(); if (!a) return;
+      const reuse = findArea(a.bb);
+      const areaQ = reuse ? reuse.q : areaQuery({ lat: a.lat, lon: a.lon, name, shape: a.shape });
+      const origin = reuse ? reuse.center : [a.lat, a.lon], [E0, N0] = toUTM(origin[0], origin[1]);
+      const t = wps.map(w => { const [e, n] = toUTM(w.lat, w.lon); return `${Math.round(e - E0)}.${Math.round(n - N0)}`; }).join('_');
+      const hash = `#t=${loop ? 'L' : 'S'}${t}&n=${encodeURIComponent(name)}&go=1`;
+      rememberTrack({ name, q: areaQ, hash, len: routeLen, loop });
+      history.replaceState(null, '', location.pathname + editHash());     // «tilbake» i nettleseren gir løypa igjen
+      location.assign(location.pathname + areaQ + hash);
+    };
+    const editHash = () => `#edit=${loop ? 'L' : 'S'};${wps.map(w => `${w.lat.toFixed(6)},${w.lon.toFixed(6)},${w.node ? 1 : 0}`).join(';')}`;
+
+    // ---------------- søk
     const input = $('q'), list = $('qRes');
     let seq = 0, timer = 0, results = [];
     input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(search, 250); });
@@ -288,31 +417,41 @@ function showIntro() {
       list.hidden = false;
     }
     function choose(r) {
-      list.hidden = true; input.value = r.name; names.circle = r.name; if (pts.length < 3) names.draw = r.name;
-      if (mode === 'circle') { center = [r.lat, r.lon]; redraw(); fly(layers.shape.getBounds()); }
-      else { map.flyTo([r.lat, r.lon], 15, { duration: 0.8 }); paintInfo(); }
+      list.hidden = true; input.value = r.name;
+      if (mode === 'free') { center = [r.lat, r.lon]; name = r.name; redraw(); map.flyToBounds(layers.circle.getBounds(), { ...PADS, maxZoom: 16, duration: 0.8 }); }
+      else { if (!wps.length) name = `Løype i ${r.name}`; map.flyTo([r.lat, r.lon], 16, { duration: 0.8 }); }
     }
 
-    // nylig bygde kart
-    const recent = readRecent();
-    if (recent.length) {
-      $('recent').innerHTML = '<div class="label">Dine kart</div>';
-      for (const r of recent) {
+    // ---------------- lagrede løyper
+    const tracks = readTracks();
+    if (tracks.length) {
+      $('recent').innerHTML = '<div class="label">Dine løyper</div>';
+      for (const r of tracks) {
         const b = document.createElement('button'); b.className = 'recent';
-        b.innerHTML = '<b></b><span></span>'; b.firstChild.textContent = r.name; b.lastChild.textContent = `${r.size} · åpner med en gang`;
-        b.onclick = () => { location.href = location.pathname + r.q; };
+        b.innerHTML = '<b></b><span></span>'; b.firstChild.textContent = r.name; b.lastChild.textContent = `${r.loop ? 'Sløyfe' : 'Sprint'} · ${(r.len / 1000).toFixed(1).replace('.', ',')} km`;
+        b.onclick = () => location.assign(location.pathname + r.q + r.hash);
         $('recent').appendChild(b);
       }
     }
 
-    $('btnBuild').onclick = () => {
-      const shape = currentShape(), c = shapeCenter(); if (!shape || !c) return;
-      $('intro').hidden = true; map.remove();
-      resolve({ lat: c[0], lon: c[1], name: names[mode], shape });
-    };
-    redraw();
-    setTimeout(() => map.invalidateSize(), 50);
-    if (!COARSE) input.focus();
+    // ---------------- start: redigere en løype fra spillet, eller vise hele Norge
+    const edit = location.hash.match(/edit=([LS]);?([^&]*)/);
+    const cMatch = location.hash.match(/[#&]c=([\d.]+),([\d.]+)/);
+    if (edit) {
+      loop = edit[1] === 'L';
+      wps = edit[2].split(';').filter(Boolean).map(s => { const [la, lo, sn] = s.split(',').map(Number); return { lat: la, lon: lo, node: null, want: sn === 1 }; });
+    }
+    if (wps.length) map.fitBounds(L.latLngBounds(wps.map(w => [w.lat, w.lon])).pad(0.25), { ...PADS, maxZoom: 16 });
+    else if (cMatch) map.setView([+cMatch[1], +cMatch[2]], 15);
+    else map.fitBounds([[57.8, 4.5], [71.2, 31.2]], COARSE ? { paddingBottomRight: [0, Math.round(innerHeight * 0.55)] } : { paddingTopLeft: [400, 20], paddingBottomRight: [20, 20] });
+    recompute();
+    setTimeout(() => { map.invalidateSize(); loadTiles(); }, 60);
+    if (!COARSE && !wps.length) input.focus();
   });
+}
+function readTracks() { try { return JSON.parse(localStorage.getItem('gateracer_tracks_ll') || '[]'); } catch { return []; } }
+function rememberTrack(t) {
+  const list = [{ ...t, ts: Date.now() }, ...readTracks().filter(r => r.hash !== t.hash || r.q !== t.q)].slice(0, 8);
+  try { localStorage.setItem('gateracer_tracks_ll', JSON.stringify(list)); } catch {}
 }
 function titleCase(s) { return s.toLowerCase().replace(/(^|[\s-])(\p{L})/gu, (m, a, b) => a + b.toUpperCase()); }
