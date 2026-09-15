@@ -3,3 +3,4 @@ data/*.tif
 data/tiles/
 .DS_Store
 __pycache__/
+bilder/

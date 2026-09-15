@@ -249,3 +249,6 @@ området, 1,4 s. Free roam-fanen, tilbake fra free roam, mobilpanel og Kongsberg
 
 **Vurdering: kart som lastes videre mens man kjører.** Mulig, men en stor ombygging (se svar til Magnus). Ikke startet.
 - `dccb8c5 Draw the track directly on the start map; fix sparse Kartverket files`
+
+### Rydding (15.09) — skjermbilder ut av Downloads
+19 `gateracer_*.png` (skjermbilder fra testingen) er flyttet fra Downloads til `bilder/`, og `bilder/` er lagt i `.gitignore`. Grunn: bildene er private arbeidsfiler for Magnus og skal ikke ligge på GitHub. Gjort under søndagspatchen i NTNU-ukesprepen, etter beskjed fra Magnus.
