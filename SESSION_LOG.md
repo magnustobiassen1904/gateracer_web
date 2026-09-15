@@ -252,3 +252,4 @@ området, 1,4 s. Free roam-fanen, tilbake fra free roam, mobilpanel og Kongsberg
 
 ### Rydding (15.09) — skjermbilder ut av Downloads
 19 `gateracer_*.png` (skjermbilder fra testingen) er flyttet fra Downloads til `bilder/`, og `bilder/` er lagt i `.gitignore`. Grunn: bildene er private arbeidsfiler for Magnus og skal ikke ligge på GitHub. Gjort under søndagspatchen i NTNU-ukesprepen, etter beskjed fra Magnus.
+- `17bd857 Ignore local screenshot folder bilder/`
