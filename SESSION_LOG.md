@@ -282,3 +282,4 @@ på Kongsberg gir samme resultat før og etter endringen. Kongsberg 1 km bygges 
 
 **Ikke verifisert.** Ytelse på ekte telefon: logaritmisk dybdebuffer og horisonten koster litt GPU. Blir det hakkete,
 er første tiltak sikt Kort/Middels på mobil.
+- `38416bc Far view, sky, weather and time of day; faster nature maps` (pushet sammen med de to upushede commitene fra 15.09)
