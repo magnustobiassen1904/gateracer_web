@@ -31,6 +31,13 @@ Kartverket gir høyde 0 over hav og utenfor Norge, og et enormt negativt tall de
 området nøyaktig 0, eller svarer Kartverket ikke, faller byggeren tilbake til åpne terrengfliser (Terrarium, ca. 5 m)
 og gjettede hushøyder. Spilleren får beskjed.
 
+**Natur bygges grovere.** Har området under 40 hus per km² og er større enn 1,25 km, hentes laserdata med 3–4 m
+oppløsning i stedet for 1,5–2,5 m. Terrenget i spillet er uansett 3 m. Et 5 km fjellområde laster da ca. 13 MB i stedet
+for 33 MB (Gaustatoppen: laserdata 7,2 s → 2,3 s). Byer og tettsteder får full oppløsning som før.
+
+**Kartfliser som henger.** Hver OSM-flis får 8 s før reserven (VersaTiles) prøves, deretter 30 s på hver. Før kunne én
+flis som hang holde hele byggingen igjen i 30 s.
+
 Bygde kart lagres i IndexedDB (de 5 siste). `GEN_VERSION` i `worldgen.js` og `intro.js` må økes når byggemetoden
 endres, ellers brukes gamle lagrede kart.
 
@@ -46,6 +53,23 @@ Koordinater regnes om fra GPS til EUREF89 UTM 33 i `web/utm.js` (Krügers serier
 - Ferdigbygd Kongsberg: `web/?map=kongsberg`. Gamle delte lenker uten sted åpner også Kongsberg.
 - En delt løype legges bak `#t=` og fungerer på alle steder. `&go=1` starter løpet direkte, `#go=free` starter free roam.
 - Startsiden med en løype til redigering: `web/#edit=L;lat,lon,1;lat,lon,1;…` (siste tall 1 = snappet til vei).
+
+## Himmel, vær og sikt
+
+`web/atmosphere.js` og `web/horizon.js`. Knappen «Vær og sikt» (eller V) i løpet, ☀︎ på telefon. Valgene huskes i nettleseren.
+
+- **Klokkeslett:** spake 00–24 og snarveier (soloppgang, morgen, dag, solnedgang, skumring, natt). «La tiden gå» kjører
+  et døgn på 16 minutter. Sola går fra nordøst via sør til nordvest (forenklet norsk sommer). Lys, skygger og tåke følger
+  solhøyden. Om natta: stjerner, måne, frontlys på bilen og nordlys (kan slås av).
+- **Vær:** klart, lettskyet, overskyet, regn, snø og tåke. Skyer i himmelen, regn og snø som partikler rundt kameraet,
+  tåka kutter sikten (tåke 300 m, snø 1 km, regn 2,6 km).
+- **Sikt (render distance):** Kort (1,6 km, som før), Middels (9 km), Lang (22 km) og Ekstrem (45 km). Alt utenfor det
+  kjørbare området er grovt terreng i ringer (50 m mellom punktene nærmest, 700 m ytterst), farget etter høyde og
+  helning: skog, snaufjell over tregrensa (som synker nordover), stein i bratte sider og snø på toppene. Innsjøer finnes
+  som helt flate flater. Jordkrumningen er med. Utsikten hentes i bakgrunnen etter at løpet har startet, så
+  ventetiden før start er den samme. Kilde: Terrarium-fliser (Kartverkets WCS gir tomme svar for grove utsnitt).
+- Terrenget utenfor området inne i kartet har samme naturfarger, og kanten av kjøreområdet er en rød-hvit stripe på bakken.
+- Dybdebufferen er logaritmisk, så bilen 7 m unna og fjell 45 km unna tegnes i samme bilde uten flimring.
 
 ## Hva som er ekte data (ferdigbygd Kongsberg)
 
@@ -96,6 +120,9 @@ python3 -m http.server 8080
 - Tre sektorer med blå porter; HUD viser sektortid og differanse mot beste sektor. Minikart oppe til høyre.
 - Bestetid og beste sektorer per løype lagres lokalt i nettleseren.
 
+Himmel-testlenker: `&hour=20.6` (klokkeslett), `&weather=klart|lettskyet|overskyet|regn|sno|take`, `&dist=kort|middels|lang|ekstrem`,
+`&view=x,y,høyde,retning` (fast kamera, retning i grader fra øst). Lagres ikke før noe endres i panelet.
+
 Test-URL-er: `?demo=1` (sentrum) / `?demo=2` (Funkelia) / `?demo=3` (Teknologiparken) starter direkte, `&mobile=1` tvinger mobilmodus, `&drive=3` gir gass i 3 sekunder,
 `&top=140` viser banen ovenfra (feilsøking).
 
@@ -140,7 +167,7 @@ nøkkel, og spillet lagrer ingenting om spilleren utenfor spillerens egen nettle
 | Kartverket høydedata (wcs.geonorge.no) | Laserdata | IP-adresse, området som bygges |
 | OpenStreetMap vektorfliser (vector.openstreetmap.org) | Veier, hus, skog, vann | IP-adresse, området som bygges |
 | VersaTiles (tiles.versatiles.org) | Reserve for OpenStreetMap-fliser | Samme, bare hvis OSM-flisene feiler |
-| Amazon S3 Terrain Tiles | Reserve for terreng hvis Kartverket svarer ikke | IP-adresse, området |
+| Amazon S3 Terrain Tiles (Terrarium) | Fjern utsikt (sikt Middels og over), og reserve for terreng hvis Kartverket svarer ikke | IP-adresse, området inntil 50 km rundt kartet |
 | jsdelivr og cdnjs | three.js og Leaflet | IP-adresse |
 
 Bevisst utelatt: Overpass-speilet på maps.mail.ru (drives av VK, Russland).

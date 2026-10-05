@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { obtainWorld, AREA, areaQuery, worldReady } from './intro.js';
 import { toUTM, fromUTM } from './utm.js';
+import { createAtmosphere, DISTANCES, WEATHERS, TIMES } from './atmosphere.js';
+import { buildHorizon, natureColor } from './horizon.js';
 
 // ------------------------------------------------------------------ data
 window.addEventListener('error', e => { document.getElementById('hint').textContent = 'Feil: ' + e.message; });
@@ -393,23 +395,28 @@ refreshVehSel();
 
 // ------------------------------------------------------------------ 3D-scene
 const raceDiv = $('race');
-let renderer, scene, camera, sun, carGroup, trackGroup = null, bldMesh = null;
+let renderer, scene, camera, sun, hemi, atm, headlight, carGroup, trackGroup = null, bldMesh = null;
 const terrainChunks = []; let makeHi = null;
 const MOBILE = new URLSearchParams(location.search).get('mobile') === '1' || matchMedia('(pointer: coarse)').matches || innerWidth < 900;
 const HI_RADIUS = MOBILE ? 330 : 700;
 const V = (x, y, z) => new THREE.Vector3(x, z, -y);
+const NC = [0, 0, 0];
 const CLS_COL = [[118, 158, 86], [66, 104, 58], [64, 118, 170], [176, 172, 96], [110, 168, 80], [120, 140, 70], [150, 142, 132], [150, 150, 140], [88, 96, 90]];
 function buildStaticScene() {
-  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });   // fjern utsikt: fjell 40 km unna og bilen 7 m unna i samme bilde
   renderer.setPixelRatio(Math.min(devicePixelRatio, MOBILE ? 1 : 2));
   renderer.shadowMap.enabled = !MOBILE; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   raceDiv.appendChild(renderer.domElement);
-  scene = new THREE.Scene(); scene.background = new THREE.Color(0x8fc1ea); scene.fog = new THREE.Fog(0xb9d3ea, 300, 1600);
+  scene = new THREE.Scene();
   camera = new THREE.PerspectiveCamera(70, 1, 0.5, 5000);
-  scene.add(new THREE.HemisphereLight(0xcfe6ff, 0x3f4a30, 0.85));
+  hemi = new THREE.HemisphereLight(0xcfe6ff, 0x3f4a30, 0.85); scene.add(hemi);
   sun = new THREE.DirectionalLight(0xfff2dc, 1.6); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
   const sc = sun.shadow.camera; sc.left = -160; sc.right = 160; sc.top = 160; sc.bottom = -160; sc.near = 10; sc.far = 800; sun.shadow.bias = -0.0008;
   scene.add(sun); scene.add(sun.target);
+  // frontlys: alltid i scenen (å legge til/fjerne lys bygger alle shadere på nytt), lyser bare når det er mørkt
+  headlight = new THREE.SpotLight(0xfff1d6, 0, 140, 0.55, 0.45, 1.2); scene.add(headlight); scene.add(headlight.target);
+  atm = createAtmosphere({ scene, renderer, camera, sun, hemi, mobile: MOBILE, lat: world.origin.lat ?? 59.7 });
+  atm.set(skyCfg());
   // terreng i biter med to detaljnivåer (nær bilen: full oppløsning, ellers 1/4)
   const CH = 150, tmat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
   const chunkMesh = (i0, j0, i1, j1, step) => {
@@ -418,9 +425,13 @@ function buildStaticScene() {
     for (let j = j0; j < j1; j += step) cols.push(j); cols.push(j1);
     const nr = rows.length, nc = cols.length, pos = new Float32Array(nr * nc * 3), col = new Float32Array(nr * nc * 3);
     for (let a = 0; a < nr; a++) for (let b = 0; b < nc; b++) {
-      const i = rows[a], j = cols[b], k = i * T.nx + j, o = (a * nc + b) * 3, c = CLS_COL[TC[k]] || CLS_COL[0], nz = 1 + (((i * 7 + j * 13) % 10) - 5) * 0.008;
+      const i = rows[a], j = cols[b], k = i * T.nx + j, o = (a * nc + b) * 3, nz = 1 + (((i * 7 + j * 13) % 10) - 5) * 0.008;
       pos[o] = T.x0 + j * T.cell; pos[o + 1] = T.zmin + TZ[k] / 10; pos[o + 2] = -(T.y0 + i * T.cell);
-      col[o] = c[0] / 255 * nz; col[o + 1] = c[1] / 255 * nz; col[o + 2] = c[2] / 255 * nz;
+      if (TC[k] === 8) {                                       // utenfor området: samme naturfarger som den fjerne utsikten
+        const z = q => T.zmin + TZ[q] / 10, ia = Math.min(T.ny - 1, i + 2) * T.nx + j, ib = Math.max(0, i - 2) * T.nx + j, ja = i * T.nx + Math.min(T.nx - 1, j + 2), jb = i * T.nx + Math.max(0, j - 2);
+        natureColor(z(k), Math.hypot(z(ia) - z(ib), z(ja) - z(jb)) / (4 * T.cell), world.origin.lat ?? 59.7, NC, nz - 1);
+        col[o] = NC[0]; col[o + 1] = NC[1]; col[o + 2] = NC[2];
+      } else { const c = CLS_COL[TC[k]] || CLS_COL[0]; col[o] = c[0] / 255 * nz; col[o + 1] = c[1] / 255 * nz; col[o + 2] = c[2] / 255 * nz; }
     }
     const idx = new Uint32Array((nr - 1) * (nc - 1) * 6); let q = 0;
     for (let a = 0; a < nr - 1; a++) for (let b = 0; b < nc - 1; b++) { const p0 = a * nc + b, p1 = p0 + 1, p2 = p0 + nc, p3 = p2 + 1; idx[q++] = p0; idx[q++] = p1; idx[q++] = p2; idx[q++] = p1; idx[q++] = p3; idx[q++] = p2; }
@@ -436,6 +447,10 @@ function buildStaticScene() {
   makeHi = c => chunkMesh(c.ci, c.cj, c.i1, c.j1, 1);
   // veier
   const roadGeos = world.roads.map(r => ribbon(r.p, r.w, 0.08, r.drive ? [0.30, 0.31, 0.34] : [0.62, 0.58, 0.50], false)).filter(Boolean);
+  if (world.bound) {                                            // kanten av kjøreområdet: rød-hvit stripe på bakken
+    const bp = resample(world.bound, 1.5, true);
+    roadGeos.push(ribbon(bp, 0.7, 0.12, null, true, i => (Math.floor(i / 3) % 2 ? [0.92, 0.92, 0.92] : [0.85, 0.12, 0.14])));
+  }
   const roads = new THREE.Mesh(mergeGeometries(roadGeos), new THREE.MeshLambertMaterial({ vertexColors: true, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 })); roads.receiveShadow = true; scene.add(roads);
   // trær
   const treeList = MOBILE ? world.trees.filter((_, i) => i % 2 === 0) : world.trees;
@@ -1249,12 +1264,20 @@ function step(dt) {
   camera.position.x += (Math.random() - 0.5) * sh; camera.position.y += (Math.random() - 0.5) * sh; camera.position.z += (Math.random() - 0.5) * sh;
   camera.lookAt(V(car.x + cs * 7, car.y + sn * 7, car.z + 1.1));
   if (qs.get('top')) { camera.position.set(car.x, car.z + Number(qs.get('top')), -car.y + 1); camera.lookAt(V(car.x, car.y, car.z)); }
-  sun.position.set(car.x - 120, car.z + 220, -car.y - 80); sun.target.position.set(car.x, car.z, -car.y);
-  if (!SIM) for (const c of terrainChunks) {
-    const d = Math.hypot(car.x - c.cx, car.y - c.cy);
-    if (d < HI_RADIUS && !c.hi) { c.hi = makeHi(c); scene.add(c.hi); }
-    else if (d > HI_RADIUS * 1.6 && c.hi) { scene.remove(c.hi); c.hi.geometry.dispose(); c.hi = null; }
-    if (c.hi) { c.hi.visible = d < HI_RADIUS; c.lo.visible = !c.hi.visible; } else c.lo.visible = true;
+  if (qs.get('view')) { const [vx, vy, vh, vd] = qs.get('view').split(',').map(Number), a = vd * Math.PI / 180; camera.position.copy(V(vx, vy, terrainZ(vx, vy) + vh)); camera.lookAt(V(vx + Math.cos(a) * 1000, vy + Math.sin(a) * 1000, terrainZ(vx, vy) + vh - 60)); }   // testkamera: x,y,høyde,retning
+  const ld = atm.lightDir();
+  sun.position.set(car.x + ld.x * 300, car.z + ld.y * 300, -car.y + ld.z * 300); sun.target.position.set(car.x, car.z, -car.y);
+  headlight.intensity = 34 * clamp((atm.night - 0.15) / 0.5, 0, 1);
+  if (headlight.intensity > 0) { headlight.position.set(car.x + cs * 1.8, car.z + 1.0, -(car.y + sn * 1.8)); headlight.target.position.set(car.x + cs * 30, terrainZ(car.x + cs * 30, car.y + sn * 30), -(car.y + sn * 30)); }
+  if (!SIM) {
+    let made = false;                                             // maks ett nytt detaljert terrengstykke per bilde: ingen hakking
+    for (const c of terrainChunks) {
+      const d = Math.hypot(car.x - c.cx, car.y - c.cy);
+      if (d < HI_RADIUS && !c.hi && !made) { c.hi = makeHi(c); scene.add(c.hi); made = true; }
+      else if (d > HI_RADIUS * 1.6 && c.hi) { scene.remove(c.hi); c.hi.geometry.dispose(); c.hi = null; }
+      if (c.hi) { c.hi.visible = d < HI_RADIUS; c.lo.visible = !c.hi.visible; } else c.lo.visible = true;
+    }
+    skyTick(dt);
   }
   // HUD
   $('spd').textContent = Math.round(sp * 3.6);
@@ -1279,6 +1302,64 @@ function step(dt) {
 }
 let lastT = 0;
 function loop(t) { if (!racing) return; const dt = Math.min(0.05, (t - lastT) / 1000 || 0.016); lastT = t; step(dt); renderer.render(scene, camera); requestAnimationFrame(loop); }
+
+// ------------------------------------------------------------------ himmel, vær og sikt
+// Valgene huskes i nettleseren. Fjern utsikt hentes i bakgrunnen når løpet har startet, og på nytt når sikten økes.
+const SKY_KEY = 'gateracer_sky';
+let sky = { hour: 13, weather: 'klart', dist: MOBILE ? 'middels' : 'lang', aurora: true, run: false, ...store.get(SKY_KEY, {}) };
+for (const k of ['hour', 'weather', 'dist']) if (qs.has(k)) sky[k] = k === 'hour' ? Number(qs.get(k)) : qs.get(k);   // testlenker, lagres ikke før noe endres
+function skyCfg() { return { hour: sky.hour, aurora: sky.aurora, weather: WEATHERS.find(w => w.id === sky.weather) || WEATHERS[0], dist: DISTANCES.find(d => d.id === sky.dist) || DISTANCES[1] }; }
+let horizon = null, horizonFor = null, horizonAbort = null, skyAcc = 0;
+async function loadHorizon() {
+  if (!renderer || world.origin.lat == null || horizonFor === sky.dist) return;
+  horizonFor = sky.dist; horizonAbort?.abort();
+  const ac = new AbortController(); horizonAbort = ac;
+  if (horizon) { scene.remove(horizon); horizon.traverse(o => o.geometry?.dispose()); horizon = null; }
+  if (sky.dist === 'kort') return;
+  const base = $('stats').textContent.replace(/ · (Henter|Fjern utsikt).*$/, '');
+  $('stats').textContent = base + ' · Henter fjern utsikt …';
+  try {
+    const g = await buildHorizon({ world, T, terrainZ, originUTM: toUTM(world.origin.lat, world.origin.lon), distId: sky.dist, mobile: MOBILE, signal: ac.signal });
+    if (ac.signal.aborted) { g?.traverse(o => o.geometry?.dispose()); return; }
+    horizon = g; if (g) scene.add(g);
+    $('stats').textContent = base + ' · Fjern utsikt: terreng © Mapzen/Terrarium';
+  } catch (e) {
+    if (ac.signal.aborted) return;
+    horizonFor = null; $('stats').textContent = base + ' · Fjern utsikt ikke tilgjengelig';
+  }
+}
+function applySky(save = true) {
+  if (save) store.set(SKY_KEY, sky);
+  atm?.set(skyCfg());
+  paintSkyPanel();
+  if (racing) loadHorizon();
+}
+function skyTick(dt) {
+  atm.update(dt, camera);
+  if (sky.run) { sky.hour = (sky.hour + dt / 40) % 24; skyAcc += dt; if (skyAcc > 0.25) { skyAcc = 0; atm.set({ hour: sky.hour }); paintSkyPanel(true); } }
+}
+function hhmm(h) { const m = Math.round(h * 60) % 1440; return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`; }
+function paintSkyPanel(timeOnly) {
+  $('skyHour').value = String(sky.hour); $('skyHourV').textContent = hhmm(sky.hour);
+  if (timeOnly) return;
+  for (const b of document.querySelectorAll('#skyTimes button')) b.classList.toggle('on', Math.abs(Number(b.dataset.h) - sky.hour) < 0.05);
+  for (const b of document.querySelectorAll('#skyWeather button')) b.classList.toggle('on', b.dataset.id === sky.weather);
+  for (const b of document.querySelectorAll('#skyDist button')) b.classList.toggle('on', b.dataset.id === sky.dist);
+  $('skyAurora').checked = sky.aurora; $('skyRun').checked = sky.run;
+}
+{
+  const mk = (box, items, onClick) => { for (const it of items) { const b = document.createElement('button'); b.textContent = it.name; Object.assign(b.dataset, it.data); b.onclick = () => onClick(it); $(box).appendChild(b); } };
+  mk('skyTimes', TIMES.map(([name, h]) => ({ name, data: { h } })), it => { sky.hour = Number(it.data.h); applySky(); });
+  mk('skyWeather', WEATHERS.map(w => ({ name: w.name, data: { id: w.id } })), it => { sky.weather = it.data.id; applySky(); });
+  mk('skyDist', DISTANCES.map(d => ({ name: d.name, data: { id: d.id } })), it => { sky.dist = it.data.id; applySky(); });
+  $('skyHour').addEventListener('input', () => { sky.hour = Number($('skyHour').value); applySky(); });
+  $('skyAurora').onchange = () => { sky.aurora = $('skyAurora').checked; applySky(); };
+  $('skyRun').onchange = () => { sky.run = $('skyRun').checked; applySky(); };
+  const toggle = () => { const p = $('skyPanel'), on = p.style.display !== 'block'; p.style.display = on ? 'block' : 'none'; $('btnSky').classList.toggle('active', on); };
+  $('btnSky').onclick = toggle; $('btnSkyM').onclick = toggle; $('btnSkyClose').onclick = toggle;
+  window.addEventListener('keydown', e => { if (e.key.toLowerCase() === 'v' && racing && e.target.tagName !== 'INPUT') toggle(); });
+  paintSkyPanel();
+}
 
 // ------------------------------------------------------------------ modusbytte
 const DRAW_BTNS = ['btnPlace', 'btnRace', 'btnFree', 'btnUndo', 'btnClear', 'btnShare', 'btnHouse', 'btnSave', 'trackList', 'trackName'].concat(AREA.prebuilt ? ['btnDemo', 'btnDemo2', 'btnDemo3'] : []);
@@ -1305,7 +1386,8 @@ function startRace(m) {
       if (d < bd) { bd = d; bs = g; }
     }
     bs = bs || rSegs[0];
-    freeStart = { x: (bs[0] + bs[2]) / 2, y: (bs[1] + bs[3]) / 2, hdg: Math.atan2(bs[3] - bs[1], bs[2] - bs[0]) };
+    freeStart = bs ? { x: (bs[0] + bs[2]) / 2, y: (bs[1] + bs[3]) / 2, hdg: Math.atan2(bs[3] - bs[1], bs[2] - bs[0]) }
+      : { x: from.x, y: from.y, hdg: 0 };                         // ingen kjørbar vei i området (fjell, vidde): start midt i
     buildMinimapBase(); buildPeds();
     hint.textContent = `Free roam · ${P.name} · kjør hvor du vil`;
   }
@@ -1319,6 +1401,8 @@ function startRace(m) {
     try { document.documentElement.requestFullscreen?.().then(() => screen.orientation?.lock?.('landscape').catch(() => {})).catch(() => {}); } catch {}
   }
   resizeRace(); resetCar(); racing = true; lastT = performance.now(); step(0.016); requestAnimationFrame(loop);
+  $('btnSky').style.display = ''; if (MOBILE) $('btnSkyM').style.display = '';
+  if (!SIM) setTimeout(loadHorizon, 400);                       // etter første bilde, så løpet starter like fort som før
 }
 $('btnRace').onclick = () => startRace('race');
 $('btnFree').onclick = () => startRace('free');
@@ -1335,6 +1419,7 @@ $('btnBack').onclick = () => {
   for (const id of DRAW_BTNS) $(id).style.display = '';
   $('loopChk').parentElement.style.display = ''; $('lineChk').parentElement.style.display = '';
   $('btnBack').style.display = 'none'; lights = { phase: 'off', n: 0, t0: 0, hold: 0 }; paintLights();
+  for (const id of ['btnSky', 'btnSkyM', 'skyPanel']) $(id).style.display = 'none';
   rebuildRoute(); resizeMap();
 };
 applyVeh();

@@ -253,3 +253,32 @@ området, 1,4 s. Free roam-fanen, tilbake fra free roam, mobilpanel og Kongsberg
 ### Rydding (15.09) — skjermbilder ut av Downloads
 19 `gateracer_*.png` (skjermbilder fra testingen) er flyttet fra Downloads til `bilder/`, og `bilder/` er lagt i `.gitignore`. Grunn: bildene er private arbeidsfiler for Magnus og skal ikke ligge på GitHub. Gjort under søndagspatchen i NTNU-ukesprepen, etter beskjed fra Magnus.
 - `17bd857 Ignore local screenshot folder bilder/`
+
+### Runde 12 (05.10) — fjern utsikt, himmel og vær, raskere natur
+Magnus: free roam i naturen tar lang tid å laste. Vil kjøre i store fjellområder, eller i det minste se langt (render
+distance som i Minecraft), med vær, soloppgang, solnedgang og nordlys.
+
+**Målt før endring (Gaustatoppen, 5 km).** 3D-byggingen tar under 0,1 s. Ventetiden er nedlasting: ca. 33 MB rå
+laserdata fra Kartverket (7 s på rask linje, mye mer hjemme/mobil), og første bygg brukte 32 s på OSM-flisene fordi én
+flis hang til 30 s-fristen. Andre gang tok flisene 0,4 s.
+
+**Beslutninger.**
+- Det kjørbare området holdes på maks 5 km. I stedet vises terreng 9–45 km ut som grov utsikt. Billigere enn å bygge
+  mer kjørbart kart, og det er utsikten som gir følelsen av store fjell.
+- Utsikten hentes fra Terrarium-flisene (S3), ikke Kartverket: Kartverkets WCS svarer med tomme filer for grove utsnitt
+  av store områder (testet 10–40 km). Terrarium var allerede reserve i spillet; nå brukes den fast når sikt ≥ Middels.
+  Ca. 2–4 MB, hentes etter at løpet har startet, så starttiden er uendret. README-tabellen over eksterne tjenester er oppdatert.
+- Natur (under 40 hus/km²) bygges med 3–4 m laserdata. Gaustatoppen: 4,1 → 1,6 mill. punkter, laserdata 7,2 → 2,3 s.
+  Trær blir litt færre (33 700 → 17 200 her) fordi grovere data finner færre enkelttopper. Byer uendret.
+- OSM-fliser: 8 s frist, så reserven, så 30 s. `GEN_VERSION` ikke økt: gamle lagrede kart er fortsatt gyldige.
+- Sikt-standard: Lang på PC, Middels på telefon.
+
+**Feil funnet og rettet.** Free roam krasjet når området ikke hadde én eneste kjørbar vei (f.eks. 3 km rundt
+Gaustatoppen): startpunktet ble hentet fra første veistykke, som ikke fantes. Bilen starter nå midt i området.
+
+**Verifisert (headless Chrome).** Dag/solnedgang/natt med nordlys/regn/snø/tåke og alle fire sikt-nivåer på Gaustatoppen.
+Natt med frontlys og fjern utsikt på ferdigbygd Kongsberg. Panel på PC og telefon (liggende og stående). Kjøresimulering
+på Kongsberg gir samme resultat før og etter endringen. Kongsberg 1 km bygges som før (629 hus, full oppløsning).
+
+**Ikke verifisert.** Ytelse på ekte telefon: logaritmisk dybdebuffer og horisonten koster litt GPU. Blir det hakkete,
+er første tiltak sikt Kort/Middels på mobil.

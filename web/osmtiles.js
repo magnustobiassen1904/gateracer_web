@@ -112,15 +112,15 @@ export async function fetchTiles(tiles, onTile) {
     while (next < tiles.length) {
       const idx = next++, [tx, ty] = tiles[idx];
       let layers = null;
-      for (let src = 0; src < VT.length && !layers; src++) {
-        for (let a = 0; a < 2 && !layers; a++) {
-          try {
-            const res = await fetchWithTimeout(`${VT[src](Z)}/${tx}/${ty}${VT_SUFFIX[src]}`, {}, 30000);
-            if (res.status === 204 || res.status === 404) { layers = {}; break; }   // tom flis (sjø, fjell)
-            if (res.ok) layers = decodeMVT(await res.arrayBuffer());
-          } catch { /* nytt forsøk / neste kilde */ }
-          if (!layers) await sleep(1200 * (a + 1));
-        }
+      // én flis som henger skal ikke holde hele byggingen igjen: kort frist først, så reserven, så lengre frister
+      for (const [src, ms] of [[0, 8000], [1, 8000], [0, 30000], [1, 30000]]) {
+        try {
+          const res = await fetchWithTimeout(`${VT[src](Z)}/${tx}/${ty}${VT_SUFFIX[src]}`, {}, ms);
+          if (res.status === 204 || res.status === 404) { layers = {}; break; }   // tom flis (sjø, fjell)
+          if (res.ok) layers = decodeMVT(await res.arrayBuffer());
+        } catch { /* neste forsøk */ }
+        if (layers) break;
+        await sleep(600);
       }
       if (!layers) throw new Error('Fant ikke kartdata fra OpenStreetMap. Sjekk nettet og prøv igjen.');
       out[idx] = layers; onTile();

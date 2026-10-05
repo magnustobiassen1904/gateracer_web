@@ -158,15 +158,14 @@ async function build({ lat, lon, shape, name }) {
   else bound = shape.pts.map(([la, lo]) => loc(la, lo));
   const bx = bound.map(p => p[0]), by = bound.map(p => p[1]);
   const side = Math.max(Math.max(...bx) - Math.min(...bx), Math.max(...by) - Math.min(...by));
-  const r = resFor(side), PAD = 30;
+  let r = resFor(side); const PAD = 30;
   const X0 = Math.floor(Math.min(...bx) - PAD), Y0 = Math.floor(Math.min(...by) - PAD);
-  const W = Math.ceil((Math.max(...bx) + PAD - X0) / r), H = Math.ceil((Math.max(...by) + PAD - Y0) / r);
-  const X1 = X0 + W * r, Y1 = Y0 + H * r;
+  const XE = Math.max(...bx) + PAD + 5, YE = Math.max(...by) + PAD + 5;   // øvre kant; nøyaktig verdi avhenger av oppløsningen under
   const inBound = (x, y) => pip(x, y, bound);
 
   // ---- 1) vektorfliser fra OpenStreetMap
   const n2 = 2 ** Z;
-  const cornersLL = [[X0, Y0], [X1, Y0], [X0, Y1], [X1, Y1]].map(([x, y]) => fromUTM(E0 + x, N0 + y));
+  const cornersLL = [[X0, Y0], [XE, Y0], [X0, YE], [XE, YE]].map(([x, y]) => fromUTM(E0 + x, N0 + y));
   const txOf = lo => Math.floor((lo + 180) / 360 * n2), tyOf = la => Math.floor((1 - Math.log(Math.tan(Math.PI / 4 + la * Math.PI / 360)) / Math.PI) / 2 * n2);
   const tx0 = txOf(Math.min(...cornersLL.map(c => c[1]))), tx1 = txOf(Math.max(...cornersLL.map(c => c[1])));
   const ty0 = tyOf(Math.max(...cornersLL.map(c => c[0]))), ty1 = tyOf(Math.min(...cornersLL.map(c => c[0])));
@@ -236,13 +235,19 @@ async function build({ lat, lon, shape, name }) {
   }
   roads.forEach((rd, i) => { rd.id = 2e12 + i; });
   prog(0, 1, `${buildings.length} hus og ${roads.length} veibiter`);
+  // Natur (fjell, vidde, skog) har nesten ingen hus. Der holder grovere laserdata: terrenget i spillet er uansett
+  // 3 m, og trær og hytter finnes like godt. Et 5 km fjellområde laster da ca. 13 MB i stedet for 33 MB.
+  const km2 = Math.abs(ringArea(bound)) / 1e6, sparse = buildings.length / Math.max(0.05, km2) < 40;
+  if (sparse && side > 1250) r = Math.max(r, side <= 2250 ? 3 : 4);
+  const W = Math.ceil((XE - 5 - X0) / r), H = Math.ceil((YE - 5 - Y0) / r);
+  const X1 = X0 + W * r, Y1 = Y0 + H * r;
 
   // ---- 2) høydedata fra Kartverket
   const g = { X0, Y0, X1, Y1, W, H, r };
   const perModel = Math.ceil(W / 1000) * Math.ceil(H / 1000);
   let done = 0, lidar = true, dtm, dom;
   const tick = () => { done++; prog(1, done / (perModel * 2), `Henter laserdata fra Kartverket (${done} av ${perModel * 2} deler)`); };
-  prog(1, 0, 'Henter laserdata fra Kartverket');
+  prog(1, 0, sparse && side > 1250 ? 'Henter laserdata fra Kartverket (grovere: få hus her)' : 'Henter laserdata fra Kartverket');
   const T1 = performance.now();
   try {
     [dtm, dom] = await Promise.all([kartverket('dtm', E0, N0, g, tick), kartverket('dom', E0, N0, g, tick)]);
@@ -366,5 +371,5 @@ async function build({ lat, lon, shape, name }) {
     buildings: outB, roads, trees, areas,
   };
   prog(4, 1, `${outB.length} hus, ${roads.length} veier, ${trees.length} trær`);
-  return { world, TZ, TC: cls, timing: { ...timing, tiles: tiles.length, pixels: W * H } };
+  return { world, TZ, TC: cls, timing: { ...timing, tiles: tiles.length, pixels: W * H, res: r } };
 }
