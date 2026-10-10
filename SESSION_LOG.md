@@ -283,3 +283,29 @@ på Kongsberg gir samme resultat før og etter endringen. Kongsberg 1 km bygges 
 **Ikke verifisert.** Ytelse på ekte telefon: logaritmisk dybdebuffer og horisonten koster litt GPU. Blir det hakkete,
 er første tiltak sikt Kort/Middels på mobil.
 - `38416bc Far view, sky, weather and time of day; faster nature maps` (pushet sammen med de to upushede commitene fra 15.09)
+
+### Runde 13 (06.10) — utredning: free roam over hele Norge, flymodus, multiplayer
+Ingen kode endret. Bare samtale, lagret som underlag.
+
+**Free roam hvor man vil.** I dag bygges ett fast område (maks 5 km, 3 km på mobil), og bilen stopper ved kanten.
+Ubegrenset free roam krever at verden lastes i ruter (f.eks. 1 × 1 km) mens man kjører. Anslag 3–5 økter, fordi
+`app.js` antar én ferdig blokk (terrengoppslag, huskollisjon, meshene). I tillegg: bygge ruter raskt nok (ca. 3 s/km²,
+trangt på mobil), flytte nullpunktet med bilen etter noen titalls km, og belastningen på OSM-flisene og Kartverket.
+Billigere mellomsteg: «myk kant» (kjør ut i grovt horisont-terreng, ca. 1 økt) eller «bygg videre her» (nytt område
+rundt bilen, kort ventetid, ca. 1 økt).
+
+**Flymodus.** Drone eller fly i arkadestil innenfor dagens område: ca. 1 økt. Horisonten (50 km) gjør det allerede
+pent fra høyden. Fly og strømming passer godt sammen: full detalj nær bakken, grovt høyt oppe.
+
+**Hele Norge ferdigbygd i skyen.** Målt på Kongsberg (ca. 30 km²): 16 MB rå, 4–6 MB komprimert, altså 0,13–0,2 MB/km².
+Fastlands-Norge (ca. 324 000 km²) blir ca. 40–65 GB, trolig 20–30 GB med smartere terreng-lagring. Lagring som
+Cloudflare R2 ca. 1–2 USD/mnd uten pris for nedlasting. GitHub Pages har en grense på 1 GB. Per spiller: 100 km kjøring
+med et belte på 3 km gir ca. 60 MB. Det dyre er å *bygge* alt (flere døgn og masse kall mot Kartverket, så det bør
+gjøres med bulk-nedlasting fra hoydedata.no). Alternativ: bygg en rute første gang noen kjører der og lagre den i
+skyen (bare spilte områder bygges). Skyen løser byggetid og API-belastning, men ikke ombyggingen av spillmotoren.
+Må avklares først: ODbL (deling av en avledet OSM-database krever trolig samme lisens og kreditering), Kartverket
+CC BY 4.0, og ny ekstern tjeneste med betaling.
+
+**Anbefalt rekkefølge:** flymodus → myk kant / bygg videre → full strømming (eventuelt fra skyen) bare hvis det
+viser seg verdt det.
+- Runde 13 committet og pushet 10.10 under opprydding av økter på Mac-en (bare logg, ingen kode).
