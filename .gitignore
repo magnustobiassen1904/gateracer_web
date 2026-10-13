@@ -4,3 +4,6 @@ data/tiles/
 .DS_Store
 __pycache__/
 bilder/
+
+# Snarvei til prosjektets iCloud-mappe (filer som ikke er kode)
+filer/
